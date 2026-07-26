@@ -6,24 +6,24 @@ from pint import Quantity
 from .units import ureg
 
 def get_materials_dataframe() -> pd.DataFrame:
-    """Obtiene el DataFrame completo de materiales desde materials.csv"""
-    # Obtener la ruta del archivo CSV
+    """Get the full materials DataFrame from materials.csv"""
+    # Get the CSV file path
     current_dir = os.path.dirname(os.path.abspath(__file__))
     material_dir = os.path.join(os.path.dirname(current_dir), 'material')
     csv_path = os.path.join(material_dir, 'materials.csv')
-    
+
     try:
         df = pd.read_csv(csv_path)
-        # Limpiar espacios en blanco en todas las columnas de texto
+        # Strip whitespace from all text columns
         for col in df.select_dtypes(include=['object']).columns:
             df[col] = df[col].astype(str).str.strip()
         return df
     except Exception as e:
-        print(f"Error al leer materials.csv: {e}")
+        print(f"Error reading materials.csv: {e}")
         return pd.DataFrame()
 
 def get_available_materials() -> List[str]:
-    """Obtiene la lista de materiales disponibles desde materials.csv"""
+    """Get the list of available materials from materials.csv"""
     df = get_materials_dataframe()
     if not df.empty:
         return df['denomination'].tolist()
@@ -33,79 +33,78 @@ def get_available_materials() -> List[str]:
 class Material(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    nombre_material: str
+    material_name: str
     young_modulus: Optional[Quantity] = None
     shear_modulus: Optional[Quantity] = None
-    elastic_limit_factor: Optional[Quantity] = None    
+    elastic_limit_factor: Optional[Quantity] = None
     poisson_coef: Optional[Quantity] = None
     RMa_file: Optional[str] = None
 
-    @field_validator('nombre_material')
+    @field_validator('material_name')
     @classmethod
     def validate_material_name(cls, v):
-        """Valida que el nombre del material esté en la lista de materiales disponibles"""
+        """Validate that the material name is in the list of available materials"""
         available_materials = get_available_materials()
         if v not in available_materials:
-            raise ValueError(f'Material "{v}" no válido. Materiales disponibles: {", ".join(available_materials)}')
+            raise ValueError(f'Material "{v}" is not valid. Available materials: {", ".join(available_materials)}')
         return v
-    
+
     @field_validator('young_modulus',
                      'shear_modulus',
                      'elastic_limit_factor',
                      'poisson_coef', mode='before')
     @classmethod
     def validate_positive_quantities(cls, v, info: ValidationInfo):
-        """Valida que las cantidades sean positivas y tengan unidades correctas"""
+        """Validate that the quantities are positive and have the correct units"""
         if v is not None:
             try:
                 quantity = ureg(v).to('MPa') if info.field_name in ['young_modulus', 'shear_modulus'] else ureg(v)
                 if quantity.magnitude <= 0:
-                    raise ValueError(f'{info.field_name} debe ser un valor positivo con unidades válidas Pascal (Pa) para young_modulus y shear_modulus, sin unidades para elastic_limit_factor, y adimensional para poisson_coef.')
+                    raise ValueError(f'{info.field_name} must be a positive value with valid units: Pascal (Pa) for young_modulus and shear_modulus, unitless for elastic_limit_factor, and dimensionless for poisson_coef.')
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar {info.field_name}: {e}')
+                raise ValueError(f'Error validating {info.field_name}: {e}')
         return v
-    
+
     @model_validator(mode='after')
     def assign_material_properties(self):
-        """Asigna automáticamente las propiedades del material basándose en materials.csv"""
-        if self.nombre_material:
+        """Automatically assign material properties based on materials.csv"""
+        if self.material_name:
             df = get_materials_dataframe()
             if not df.empty:
-                # Limpiar los nombres de las columnas (eliminar espacios)
+                # Strip whitespace from column names
                 df.columns = df.columns.str.strip()
-                
-                # Buscar la fila correspondiente al material
-                material_row = df[df['denomination'] == self.nombre_material]
-                
+
+                # Find the row matching the material
+                material_row = df[df['denomination'] == self.material_name]
+
                 if not material_row.empty:
                     row = material_row.iloc[0]
-                    
-                    # Asignar propiedades automáticamente (solo si no están ya establecidas y el valor no está vacío)
+
+                    # Assign properties automatically (only if not already set and the value is not empty)
                     if self.young_modulus is None and 'young_modulus' in df.columns:
                         val = row.get('young_modulus')
                         if pd.notna(val) and str(val).strip() != '':
                             self.young_modulus = float(val) * ureg.MPa
-                    
+
                     if self.shear_modulus is None and 'shear_modulus' in df.columns:
                         val = row.get('shear_modulus')
                         if pd.notna(val) and str(val).strip() != '':
                             self.shear_modulus = float(val) * ureg.MPa
-                    
-                    if self.elastic_limit_factor is None and 'factor_limite_elástico' in df.columns:
-                        val = row.get('factor_limite_elástico')
+
+                    if self.elastic_limit_factor is None and 'elastic_limit_factor' in df.columns:
+                        val = row.get('elastic_limit_factor')
                         if pd.notna(val) and str(val).strip() != '':
                             self.elastic_limit_factor = float(val) * ureg.dimensionless
-                    
+
                     if self.poisson_coef is None and 'poisson_coef' in df.columns:
                         val = row.get('poisson_coef')
                         if pd.notna(val) and str(val).strip() != '':
                             self.poisson_coef = float(val) * ureg.dimensionless
-                    
+
                     if self.RMa_file is None and 'RMa_file' in df.columns:
                         val = row.get('RMa_file')
                         if pd.notna(val) and str(val).strip() != '':
                             self.RMa_file = str(val).strip()
-        
+
         return self
-    

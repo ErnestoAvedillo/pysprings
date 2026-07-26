@@ -1,19 +1,19 @@
 
-TIPOS_FINAL_MUELLE_COMPRESION = {
-    1: 'abierto_rectificado',
-    2: 'cerrado_rectificado',
-    3: 'abierto_no_rectificado',
-    4: 'cerrado_no_rectificado',
+COMPRESSION_SPRING_END_TYPES = {
+    1: 'open_ground',
+    2: 'closed_ground',
+    3: 'open_unground',
+    4: 'closed_unground',
 }
 
-TIPOS_FINAL_MUELLE_TRACCION = {
-    1: 'anillo_doble_aleman_entero_centrado',
-    2: 'anillo_doble_aleman_entero_lateral',
-    3: 'anillo_simple_aleman_centrado',
-    4: 'anillo_simple_aleman_entero_centrado',
-    5: 'anillo_simple_aleman_entero_lateral',
-    6: 'anillo_especial',
-    7: 'gancho_ingles'
+EXTENSION_SPRING_END_TYPES = {
+    1: 'german_double_full_loop_centered',
+    2: 'german_double_full_loop_offset',
+    3: 'german_single_loop_centered',
+    4: 'german_single_full_loop_centered',
+    5: 'german_single_full_loop_offset',
+    6: 'special_loop',
+    7: 'english_hook'
 }
 
 WAHL_FACTOR_CONSTANTS = {
@@ -22,7 +22,7 @@ WAHL_FACTOR_CONSTANTS = {
     'green': [6,12]
 }
 
-TIPOS_CONFORMADO = {
-    1: 'conformado_en_frio',
-    2: 'conformado_en_caliente'
+FORMING_TYPES = {
+    1: 'cold_formed',
+    2: 'hot_formed'
 }

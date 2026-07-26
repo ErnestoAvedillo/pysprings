@@ -1,0 +1,10 @@
+{
+    "descripcion": "Degree-2 polynomial regression model for factor f vs Sut",
+    "entrada": "Sut (natural log must be applied beforehand)",
+    "salida": "factor f",
+    "coefficients_ascending_powers": [
+        3.049205614942736,
+        -0.8270373870580277,
+        0.05115600391218953
+    ]
+}

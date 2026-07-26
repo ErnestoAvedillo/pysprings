@@ -1,6 +1,6 @@
 from math import pi
 from pydantic import field_validator, model_validator, ConfigDict
-from .constants import WAHL_FACTOR_CONSTANTS, TIPOS_FINAL_MUELLE_COMPRESION, TIPOS_CONFORMADO
+from .constants import WAHL_FACTOR_CONSTANTS, COMPRESSION_SPRING_END_TYPES, FORMING_TYPES
 from ..pymodels.wire_characteristics import WireCharacteristics
 from ..pymodels.material import Material
 from .goodman import Goodman
@@ -15,24 +15,24 @@ import io
 import base64
 import numpy as np
 from .goodman import GoodmanData, GoodmanAnalyzer
-from .lineal import MuelleLineal
+from .lineal import LinealSpring
 from pint import Quantity
 from ..pymodels.units import ureg
-from ..pymodels.posiciones import PosicionesTableLineal
-"""Clase para el cálculo de un muelle de compresión"""
+from ..pymodels.positions import LinearPositionsTable
+"""Class for calculating a compression spring."""
 
 
-class MuelleCompresion(MuelleLineal):
-    # Campos adicionales de MuelleCompresion
+class CompressionSpring(LinealSpring):
+    # Additional CompressionSpring fields
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
-    tipo_final: str = TIPOS_FINAL_MUELLE_COMPRESION[1]  # por defecto rectificado
-    tipo_conformado: str = TIPOS_CONFORMADO[1] # por defecto conformado en frío
-    longitud_hilo: Optional[Quantity] = 0.0 * ureg.mm # en mm
-    numero_espiras: Optional[float] = None
-    longitud_bloqueo: Quantity = 0.0 * ureg.mm  # Longitud con carga máxima en mm
-    posiciones: PosicionesTableLineal = PosicionesTableLineal()
+    type_of_end: str = COMPRESSION_SPRING_END_TYPES[1]  # ground by default
+    type_conforming: str = FORMING_TYPES[1] # cold formed by default
+    wire_length: Optional[Quantity] = 0.0 * ureg.mm # in mm
+    nr_coils: Optional[float] = None
+    solid_length: Quantity = 0.0 * ureg.mm  # Length at maximum load in mm
+    positions: LinearPositionsTable = LinearPositionsTable()
 
-    @field_validator('longitud_hilo', "longitud_bloqueo", mode='before')
+    @field_validator('wire_length', "solid_length", mode='before')
     @classmethod
     def validate_quantities(cls, value):
         if isinstance(value, str):
@@ -40,151 +40,151 @@ class MuelleCompresion(MuelleLineal):
                 quantity = ureg(value)
                 return quantity.to('mm')
             except Exception as e:
-                raise ValueError(f"Error al convertir '{value}' a Quantity: {e}")
+                raise ValueError(f"Error converting '{value}' to Quantity: {e}")
         elif isinstance(value, (int, float)):
             return Quantity(value, 'mm')
         elif isinstance(value, Quantity):
             return value.to('mm')
         else:
-            raise ValueError(f"Valor no válido para Quantity: {value}")
-        
-    def __init__(self, material, diametro_hilo: float, **data):
-        """inicializo las variables del muelle a 0"""
-        # Inicializar con valores por defecto
-        super().__init__(material, diametro_hilo, **data)
-    
-    def set_material(self, material, diametro_hilo):
-        return super().set_material(material, diametro_hilo)
-    
+            raise ValueError(f"Invalid value for Quantity: {value}")
+
+    def __init__(self, material, wire_diameter: float, **data):
+        """Initialize the spring variables to 0."""
+        # Initialize with default values
+        super().__init__(material, wire_diameter, **data)
+
+    def set_material(self, material, wire_diameter):
+        return super().set_material(material, wire_diameter)
+
     def calculate_spring_properties(self,
-                                    numero_espiras:float=None,
-                                    pitch:float=None,
-                                    longitud_libre:float=None):
-        """Tercera parte: Calcula todas las propiedades del muelle"""
-        parameters_provided = sum(1 for var in [numero_espiras, pitch, longitud_libre] if var is not None)
+                                    nr_coils: float = None,
+                                    pitch: float = None,
+                                    free_length: float = None):
+        """Part three: Calculate all spring properties."""
+        parameters_provided = sum(1 for var in [nr_coils, pitch, free_length] if var is not None)
         if parameters_provided != 2:
-            raise ValueError("Debe proporcionar exactamente dos de las siguientes variables: numero_espiras, pitch, longitud_libre")
+            raise ValueError("You must provide exactly two of the following variables: nr_coils, pitch, free_length")
 
-        if numero_espiras is not None and pitch is not None:
-            self.numero_espiras = numero_espiras
+        if nr_coils is not None and pitch is not None:
+            self.nr_coils = nr_coils
             self.pitch = pitch
-            self.longitud_libre = self.numero_espiras * self.pitch
-        elif numero_espiras is not None and longitud_libre is not None:
-            self.numero_espiras = numero_espiras
-            self.longitud_libre = longitud_libre
-            self.pitch = self.longitud_libre / self.numero_espiras
-        elif pitch is not None and longitud_libre is not None:
+            self.free_length = self.nr_coils * self.pitch
+        elif nr_coils is not None and free_length is not None:
+            self.nr_coils = nr_coils
+            self.free_length = free_length
+            self.pitch = self.free_length / self.nr_coils
+        elif pitch is not None and free_length is not None:
             self.pitch = pitch
-            self.longitud_libre = longitud_libre
-            self.numero_espiras = self.longitud_libre / self.pitch
+            self.free_length = free_length
+            self.nr_coils = self.free_length / self.pitch
         else:
-            raise ValueError("Debe proporcionar exactamente dos de las siguientes variables: numero_espiras, pitch, longitud_libre")
+            raise ValueError("You must provide exactly two of the following variables: nr_coils, pitch, free_length")
 
-        if self.pitch <= self.diametro_hilo:
-            raise ValueError("El pitch debe ser mayor que el diámetro del hilo para evitar interferencias entre espiras.")
-        self.calculo_espiras_utiles(numero_espiras=self.numero_espiras)
-        self.calcular_factor_de_wahl()
-        self.calcular_constante_muelle()
-        self.calcular_longitud_bloqueo()
-        self.calcular_longitud_hilo()
-        self.calcula_carga_en_posicion(self.longitud_bloqueo)
-        self.calcular_diametro_externo_en_posicion(self.longitud_bloqueo)
+        if self.pitch <= self.wire_diameter:
+            raise ValueError("The pitch must be greater than the wire diameter to avoid interference between coils.")
+        self.calculate_active_coils(nr_coils=self.nr_coils)
+        self.calculate_wahl_factor()
+        self.calculate_spring_constant()
+        self.calculate_solid_length()
+        self.calculate_wire_length()
+        self.calculate_load_at_position(self.solid_length)
+        self.calculate_outer_diameter_at_position(self.solid_length)
         properties = self.get_spring_data()
         return properties
 
-    def calculo_espiras_utiles(self, numero_espiras=numero_espiras):
-        """Calcula el número de espiras útiles del muelle según el tipo de final"""
-        self.numero_espiras = numero_espiras
-        # Solo se calculan las espiras útiles para muelles de compresión
-        # conformados en frio. En conformado en caliente se resta 1.5 veces el diámetro del hilo.
-        if self.tipo_conformado == TIPOS_CONFORMADO[1]:  # conformado en frío
-            self.numero_espiras_utiles = self.numero_espiras - 2
-            if self.tipo_final in [TIPOS_FINAL_MUELLE_COMPRESION[3], TIPOS_FINAL_MUELLE_COMPRESION[4]]:  # no rectificado
-                self.numero_espiras_utiles -= 1.5
-        else: # conformado en caliente
-            self.numero_espiras_utiles = self.numero_espiras - 1.5
-        if self.tipo_final in [TIPOS_FINAL_MUELLE_COMPRESION[1], TIPOS_FINAL_MUELLE_COMPRESION[2]]:  # rectificado
-            self.numero_espiras_utiles -= 0.3
+    def calculate_active_coils(self, nr_coils):
+        """Calculate the number of active spring coils based on the end type."""
+        self.nr_coils = nr_coils
+        # Active coils are calculated only for compression springs.
+        # For hot-formed springs, 1.5 times the wire diameter is subtracted.
+        if self.type_conforming == FORMING_TYPES[1]:  # cold formed
+            self.nr_active_coils = self.nr_coils - 2
+            if self.type_of_end in [COMPRESSION_SPRING_END_TYPES[3], COMPRESSION_SPRING_END_TYPES[4]]:  # unground
+                self.nr_active_coils -= 1.5
+        else: # hot formed
+            self.nr_active_coils = self.nr_coils - 1.5
+        if self.type_of_end in [COMPRESSION_SPRING_END_TYPES[1], COMPRESSION_SPRING_END_TYPES[2]]:  # ground
+            self.nr_active_coils -= 0.3
         else:
-            self.numero_espiras_utiles -= 1.1
-        return self.numero_espiras_utiles
+            self.nr_active_coils -= 1.1
+        return self.nr_active_coils
 
-    def calcular_longitud_hilo(self):
-        """Calcula la longitud del hilo del muelle"""
-        self.longitud_hilo = self.numero_espiras * np.sqrt((pi * self.diametro_medio)**2 + self.pitch**2)
-        return self.longitud_hilo
+    def calculate_wire_length(self):
+        """Calculate the spring wire length."""
+        self.wire_length = self.nr_coils * np.sqrt((pi * self.mean_diameter)**2 + self.pitch**2)
+        return self.wire_length
 
-    def calcular_paso(self):
-        """Calcula el paso del muelle"""
-        return self.longitud_libre / self.numero_espiras
+    def calculate_pitch(self):
+        """Calculate the spring pitch."""
+        return self.free_length / self.nr_coils
 
-    def calcular_longitud_bloqueo(self):
-        """Calcula la longitud de bloqueo del muelle"""
-        self.longitud_bloqueo = self.numero_espiras * self.diametro_hilo
-        return self.longitud_bloqueo
+    def calculate_solid_length(self):
+        """Calculate the spring solid length."""
+        self.solid_length = self.nr_coils * self.wire_diameter
+        return self.solid_length
 
-    def add_posicion_carga(self, longitud):
-        """Agrega una posición de carga a la tabla de posiciones"""
+    def add_load_position(self, length):
+        """Add a load position to the positions table."""
         try:
-            if longitud < self.longitud_bloqueo.magnitude:
-                raise ValueError("La posición no puede ser menor que la longitud de bloqueo del muelle")
-            carga = self.calcula_carga_en_posicion(longitud)
-            tension = self.calcula_tension_en_posicion()
-            diametro_externo = self.calcular_diametro_externo_en_posicion(longitud)
+            if length < self.solid_length.magnitude:
+                raise ValueError("The position cannot be smaller than the spring's solid length")
+            load = self.calculate_load_at_position(length)
+            stress = self.calculate_stress_at_position()
+            outer_diameter = self.calculate_outer_diameter_at_position(length)
         except ValueError as e:
-            raise ValueError(f"Error al agregar posición de carga en longitud {longitud}: {e}")
-        self.posiciones.add_posicion_carga(
-            posicion=self.longitud_posicion,
-            recorrido=self.longitud_libre - self.longitud_posicion,
-            carga=carga,
-            tension=tension,
-            diametro_externo=diametro_externo,
-            diametro_interno=max(diametro_externo - 2 * self.diametro_hilo, 0 * ureg.mm)
+            raise ValueError(f"Error adding load position at length {length}: {e}")
+        self.positions.add_load_position(
+            position=self.position_length,
+            travel=self.free_length - self.position_length,
+            load=load,
+            stress=stress,
+            outer_diameter=outer_diameter,
+            inner_diameter=max(outer_diameter - 2 * self.wire_diameter, 0 * ureg.mm)
         )
-    
-    def calcular_diametro_externo_en_posicion(self, longitud):
-        """Calcula el diámetro externo del muelle"""
-        self.longitud_posicion = longitud
-        diametro_externo = self.diametro_medio + self.diametro_hilo + \
-                           self.diametro_medio * self.material.poisson_coef * \
-                           (self.longitud_libre - self.longitud_posicion) / self.longitud_libre
-        return diametro_externo
 
-    def vaciar_tablas(self):
-        """Vacía las tablas de posiciones, cargas, tensiones y diámetros externos"""
-        self.posiciones.clear_table()
+    def calculate_outer_diameter_at_position(self, length):
+        """Calculate the spring outer diameter."""
+        self.position_length = length
+        outer_diameter = self.mean_diameter + self.wire_diameter + \
+                           self.mean_diameter * self.material.poisson_coef * \
+                           (self.free_length - self.position_length) / self.free_length
+        return outer_diameter
+
+    def empty_tables(self):
+        """Clear the positions, loads, stresses, and outer diameters tables."""
+        self.positions.clear_table()
 
     def get_spring_data(self):
-        """Retorna un diccionario con los datos principales del muelle"""
+        """Return a dictionary with the main spring data."""
         return {
-            "material": self.material.nombre_material,
+            "material": self.material.material_name,
             "young_modulus": self.material.young_modulus,
             "shear_modulus": self.material.shear_modulus,
             "elastic_limit_factor": self.material.elastic_limit_factor,
             "poisson_coef": self.material.poisson_coef,
             "RMa_file": self.material.RMa_file,
-            "diametro_hilo": self.diametro_hilo,
-            "diametro_medio": self.diametro_medio,
-            "longitud_libre": self.longitud_libre,
-            "numero_espiras": self.numero_espiras,
-            "numero_espiras_utiles": self.numero_espiras_utiles,
-            "constante_muelle": self.constante_muelle,
-            "indice_muelle": self.indice_muelle,
-            "factor_wahl": self.factor_wahl,
-            "factor_wahl_category": self.factor_wahl_category,
-            "longitud_bloqueo": self.longitud_bloqueo,
-            "longitud_hilo": self.longitud_hilo,
-            "numero_ciclos": self.numero_ciclos,
-            "shot_peening": self.shot_peening    
+            "wire_diameter": self.wire_diameter,
+            "mean_diameter": self.mean_diameter,
+            "free_length": self.free_length,
+            "nr_coils": self.nr_coils,
+            "nr_active_coils": self.nr_active_coils,
+            "spring_constant": self.spring_constant,
+            "spring_index": self.spring_index,
+            "wahl_factor": self.wahl_factor,
+            "wahl_factor_category": self.wahl_factor_category,
+            "solid_length": self.solid_length,
+            "wire_length": self.wire_length,
+            "number_cycles": self.number_cycles,
+            "shot_peening": self.shot_peening
         }
 
     def get_data_positions(self):
-        """Retorna la tabla de posiciones, cargas, tensiones y diámetros externos"""
-        return self.posiciones.posiciones
+        """Return the positions, loads, stresses, and outer diameters table."""
+        return self.positions.positions
 
     def get_data_travels(self):
-        """Retorna la tabla de posiciones para la curva de recorrido"""
-        return self.posiciones.posiciones
+        """Return the positions table for the travel curve."""
+        return self.positions.positions
 
     def get_forces_vs_position_graph(self, show=False):
         def _to_mm_float(value):
@@ -193,14 +193,14 @@ class MuelleCompresion(MuelleLineal):
         def _to_n_float(value):
             return float(value.to('N').magnitude) if isinstance(value, Quantity) else float(value)
 
-        tabla_posiciones = self.posiciones.posiciones
-        posiciones = [_to_mm_float(pc.posicion) for pc in tabla_posiciones]
-        cargas = [_to_n_float(pc.carga) for pc in tabla_posiciones]
+        positions_table = self.positions.positions
+        positions = [_to_mm_float(pc.position) for pc in positions_table]
+        loads = [_to_n_float(pc.load) for pc in positions_table]
         plot = plt.figure()
-        plt.plot(posiciones, cargas, marker='o')
-        plt.title('Curva de Carga vs Posición')
-        plt.xlabel('Posición (mm)')
-        plt.ylabel('Carga (N)')
+        plt.plot(positions, loads, marker='o')
+        plt.title('Load vs Position Curve')
+        plt.xlabel('Position (mm)')
+        plt.ylabel('Load (N)')
         plt.grid(True)
         if show:
             plt.show()
@@ -222,14 +222,14 @@ class MuelleCompresion(MuelleLineal):
         def _to_n_float(value):
             return float(value.to('N').magnitude) if isinstance(value, Quantity) else float(value)
 
-        tabla_posiciones = self.posiciones.posiciones
-        recorridos = [_to_mm_float(pc.recorrido) for pc in tabla_posiciones]
-        cargas = [_to_n_float(pc.carga) for pc in tabla_posiciones]
+        positions_table = self.positions.positions
+        travels = [_to_mm_float(pc.travel) for pc in positions_table]
+        loads = [_to_n_float(pc.load) for pc in positions_table]
         plot = plt.figure()
-        plt.plot(recorridos, cargas, marker='o')
-        plt.title('Curva de Carga vs Recorrido')
-        plt.xlabel('Recorrido (mm)')
-        plt.ylabel('Carga (N)')
+        plt.plot(travels, loads, marker='o')
+        plt.title('Load vs Travel Curve')
+        plt.xlabel('Travel (mm)')
+        plt.ylabel('Load (N)')
         plt.grid(True)
         # Save the plot to a BytesIO object
         if show:
@@ -247,14 +247,14 @@ class MuelleCompresion(MuelleLineal):
         def _to_mm_float(value):
             return float(value.to('mm').magnitude) if isinstance(value, Quantity) else float(value)
 
-        tabla_posiciones = self.posiciones.posiciones
-        posiciones = [_to_mm_float(pc.posicion) for pc in tabla_posiciones]
-        diametros = [_to_mm_float(pc.diametro_externo) for pc in tabla_posiciones]
+        positions_table = self.positions.positions
+        positions = [_to_mm_float(pc.position) for pc in positions_table]
+        diameters = [_to_mm_float(pc.outer_diameter) for pc in positions_table]
         plot = plt.figure()
-        plt.plot(posiciones, diametros, marker='o', color='orange')
-        plt.title('Diámetro Externo vs Posición')
-        plt.xlabel('Posición (mm)')
-        plt.ylabel('Diámetro Externo (mm)')
+        plt.plot(positions, diameters, marker='o', color='orange')
+        plt.title('Outer Diameter vs Position')
+        plt.xlabel('Position (mm)')
+        plt.ylabel('Outer Diameter (mm)')
         plt.grid(True)
         if show:
             plt.show()
@@ -270,21 +270,20 @@ class MuelleCompresion(MuelleLineal):
         return plot_data
 
     def get_diameter_vs_position_graph(self, show=False):
-        """Grafica diametro vs posicion y agrega un esquema con
-        circunferencias."""
+        """Plot diameter versus position and add a circle diagram."""
         def _to_mm_float(value):
             if isinstance(value, Quantity):
                 return float(value.to('mm').magnitude)
             return float(value)
 
-        tabla_posiciones = self.posiciones.posiciones
-        posiciones = [_to_mm_float(pc.posicion) for pc in tabla_posiciones]
-        diametros = [_to_mm_float(pc.diametro_externo) for pc in tabla_posiciones]
+        positions_table = self.positions.positions
+        positions = [_to_mm_float(pc.position) for pc in positions_table]
+        diameters = [_to_mm_float(pc.outer_diameter) for pc in positions_table]
 
-        diametro_exterior = self.diametro_medio + self.diametro_hilo
-        diametro_interior = max(self.diametro_medio - self.diametro_hilo, 0 * ureg.mm)
-        diametro_exterior_mm = _to_mm_float(diametro_exterior)
-        diametro_interior_mm = _to_mm_float(diametro_interior)
+        outer_diameter = self.mean_diameter + self.wire_diameter
+        inner_diameter = max(self.mean_diameter - self.wire_diameter, 0 * ureg.mm)
+        outer_diameter_mm = _to_mm_float(outer_diameter)
+        inner_diameter_mm = _to_mm_float(inner_diameter)
 
         fig, (ax1, ax2) = plt.subplots(
             1,
@@ -293,56 +292,56 @@ class MuelleCompresion(MuelleLineal):
             gridspec_kw={"width_ratios": [2, 1]}
         )
 
-        ax1.plot(posiciones, diametros, marker='o', color='orange')
-        ax1.set_title('Diametro Externo vs Posicion')
-        ax1.set_xlabel('Posicion (mm)')
-        ax1.set_ylabel('Diametro Externo (mm)')
+        ax1.plot(positions, diameters, marker='o', color='orange')
+        ax1.set_title('Outer Diameter vs Position')
+        ax1.set_xlabel('Position (mm)')
+        ax1.set_ylabel('Outer Diameter (mm)')
         ax1.grid(True)
 
         ax2.set_aspect('equal')
         ax2.axis('off')
 
-        radio_exterior = diametro_exterior_mm / 2.0
-        radio_interior = diametro_interior_mm / 2.0
-        max_radio = max(radio_exterior, radio_interior, 1.0)
-        padding = max_radio * 0.25
+        outer_radius = outer_diameter_mm / 2.0
+        inner_radius = inner_diameter_mm / 2.0
+        max_radius = max(outer_radius, inner_radius, 1.0)
+        padding = max_radius * 0.25
 
         ax2.add_patch(Circle((0, 0),
-                             radio_exterior,
+                             outer_radius,
                              fill=False, lw=2,
                              color='tab:green'))
-        if radio_interior > 0:
+        if inner_radius > 0:
             ax2.add_patch(Circle((0, 0),
-                                 radio_interior,
+                                 inner_radius,
                                  fill=False,
                                  lw=2,
                                  color='tab:blue'))
 
-        ax2.plot([-radio_exterior, radio_exterior],
+        ax2.plot([-outer_radius, outer_radius],
                  [0, 0],
                  color='tab:green',
                  lw=1)
         ax2.text(0,
                  -padding,
-                 f"Dext = {diametro_exterior_mm:.2f} mm",
+                 f"Dext = {outer_diameter_mm:.2f} mm",
                  ha='center',
                  va='top',
                  fontsize=8)
 
-        if radio_interior > 0:
+        if inner_radius > 0:
             ax2.plot([0, 0],
-                     [-radio_interior, radio_interior],
+                     [-inner_radius, inner_radius],
                      color='tab:blue',
                      lw=1)
             ax2.text(0,
                      padding,
-                     f"Dint = {diametro_interior_mm:.2f} mm",
+                     f"Dint = {inner_diameter_mm:.2f} mm",
                      ha='center',
                      va='bottom',
                      fontsize=8)
 
-        ax2.set_xlim(-max_radio - padding, max_radio + padding)
-        ax2.set_ylim(-max_radio - padding, max_radio + padding)
+        ax2.set_xlim(-max_radius - padding, max_radius + padding)
+        ax2.set_ylim(-max_radius - padding, max_radius + padding)
         if show:
             plt.show()
         buf = io.BytesIO()
@@ -355,80 +354,80 @@ class MuelleCompresion(MuelleLineal):
         return plot_data
 
     def create_goodman_diagram(self, show=False):
-        """Genera el diagrama de Goodman y devuelve un diccionario con la
-        imagen en base64, el análisis y las tensiones calculadas. Si falla,
-        devuelve un diccionario con las claves 'error' y 'traceback'."""
+        """Generate the Goodman diagram and return a dictionary containing the
+        base64 image, analysis, and calculated stresses. If it fails, return a
+        dictionary with the 'error' and 'traceback' keys."""
         try:
-            # Obtener tensiones desde la tabla de posiciones
-            sigma_max = self.get_tension_max()
-            sigma_min = self.get_tension_min()
+            # Get stresses from the positions table.
+            stress_max = self.get_stress_max()
+            stress_min = self.get_stress_min()
 
-            # Preparar datos para Goodman
+            # Prepare data for Goodman.
             goodman_data = GoodmanData(
                 material=self.material,
-                diameter=self.diametro_hilo,
-                carga='torsion',
-                cycles=int(self.numero_ciclos)
+                diameter=self.wire_diameter,
+                load_type='torsion',
+                cycles=int(self.number_cycles)
             )
 
             analyzer = GoodmanAnalyzer(goodman_data,
                                        shot_peening=self.shot_peening)
             if show:
-                analyzer.plot_diagram(sigma_max=sigma_max, sigma_min=sigma_min)
+                analyzer.plot_diagram(sigma_max=stress_max, sigma_min=stress_min)
                 return
-            
-            image_b64 = analyzer.get_diagram_image(sigma_max=sigma_max,
-                                                   sigma_min=sigma_min)
 
-            analisis = analyzer.get_analysis_summary(sigma_max, sigma_min)
+            image_b64 = analyzer.get_diagram_image(sigma_max=stress_max,
+                                                   sigma_min=stress_min)
+
+            analysis = analyzer.get_analysis_summary(stress_max, stress_min)
 
             return {
-                'imagen': image_b64,
-                'analisis': analisis,
-                'tensiones': {
-                    'tension_max': round(sigma_max, 2),
-                    'tension_min': round(sigma_min, 2),
-                    'carga_max': round(self.get_carga_max(), 2),
-                    'carga_min': round(self.get_carga_min(), 2)
+                'image': image_b64,
+                'analysis': analysis,
+                'stresses': {
+                    'stress_max': round(stress_max, 2),
+                    'stress_min': round(stress_min, 2),
+                    'load_max': round(self.get_load_max(), 2),
+                    'load_min': round(self.get_load_min(), 2)
                 }
             }
         except Exception as e:
             tb = traceback.format_exc()
-            print(f"Error creando diagrama de Goodman en MuelleLineal: {e}\n{tb}")
+            print(f"Error creating Goodman diagram in LinealSpring: {e}\n{tb}")
             return {'error': str(e), 'traceback': tb}
 
     def get_goodman_graph(self, goodman: Goodman, show=True):
-        """Crea el diagrama de Goodman para el muelle"""
+        """Create the Goodman diagram for the spring."""
         # Placeholder implementation
-        # Aquí se implementaría la lógica para crear el diagrama de Goodman
-        sigma_min = min(self.posiciones.posiciones,
-                        key=lambda x: x.tension).tension
-        sigma_max = max(self.posiciones.posiciones,
-                        key=lambda x: x.tension).tension
+        # The logic for creating the Goodman diagram would be implemented here.
+        stress_min = min(self.positions.positions,
+                        key=lambda x: x.stress).stress
+        stress_max = max(self.positions.positions,
+                        key=lambda x: x.stress).stress
         if show:
-            goodman.plot_goodman_graph(sigma_max, sigma_min)
+            goodman.plot_goodman_graph(stress_max, stress_min)
         else:
-            goodman_fig = goodman.get_goodman_graph(sigma_max, sigma_min)
+            goodman_fig = goodman.get_goodman_graph(stress_max, stress_min)
         return goodman_fig
 
     def get_goodman_analysis_summary(self, goodman: Goodman):
-        """Retorna un resumen completo del análisis de Goodman"""
-        sigma_min = self.get_tension_min()
-        sigma_max = self.get_tension_max()
-        return goodman.get_analysis_summary(sigma_max, sigma_min)
+        """Return a complete summary of the Goodman analysis."""
+        stress_min = self.get_stress_min()
+        stress_max = self.get_stress_max()
+        return goodman.get_analysis_summary(stress_max, stress_min)
 
-    def get_tension_max(self):
-        """Retorna la tensión máxima del muelle"""
-        return max(self.posiciones.posiciones, key=lambda x: x.tension).tension
+    def get_stress_max(self):
+        """Return the maximum spring stress."""
+        return max(self.positions.positions, key=lambda x: x.stress).stress
 
-    def get_tension_min(self):
-        """Retorna la tensión mínima del muelle"""
-        return min(self.posiciones.posiciones, key=lambda x: x.tension).tension
+    def get_stress_min(self):
+        """Return the minimum spring stress."""
+        return min(self.positions.positions, key=lambda x: x.stress).stress
 
-    def get_carga_max(self):
-        """Retorna la carga máxima del muelle"""
-        return max(self.posiciones.posiciones, key=lambda x: x.carga).carga
+    def get_load_max(self):
+        """Return the maximum spring load."""
+        return max(self.positions.positions, key=lambda x: x.load).load
 
-    def get_carga_min(self):
-        """Retorna la carga mínima del muelle"""
-        return min(self.posiciones.posiciones, key=lambda x: x.carga).carga
+    def get_load_min(self):
+        """Return the minimum spring load."""
+        return min(self.positions.positions, key=lambda x: x.load).load

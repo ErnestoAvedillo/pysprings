@@ -1,44 +1,44 @@
-from .constants import WAHL_FACTOR_CONSTANTS, TIPOS_FINAL_MUELLE_COMPRESION
+from .constants import WAHL_FACTOR_CONSTANTS, COMPRESSION_SPRING_END_TYPES
 from ..pymodels.wire_characteristics import WireCharacteristics
 from ..pymodels.material import Material
-from ..pymodels.posiciones import PosicionesTableLineal
+from ..pymodels.positions import LinearPositionsTable
 from typing import Optional
 from pint import Quantity
 from ..pymodels.units import ureg
 from pydantic import field_validator, ConfigDict
 import numpy as np
-"""Clase para el cálculo de un muelle lineal"""
+"""Class for calculating a linear spring"""
 COMPRESSION = 1
 TENSION = -1
 
 
-class MuelleLineal(WireCharacteristics):
-    # Campos adicionales de MuelleLineal
+class LinealSpring(WireCharacteristics):
+    # Additional LinealSpring fields
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
-    diametro_medio: Quantity = 0.0 * ureg.mm  # en mm
-    diametro_exterior: Quantity = 0.0 * ureg.mm  # en mm
-    diametro_interior: Quantity = 0.0 * ureg.mm   # en mm
-    longitud_libre: Quantity = 0.0 * ureg.mm  # en mm
-    numero_espiras_utiles: float = 0.0
-    pitch: Quantity = 0.0 * ureg.mm  # en mm
+    mean_diameter: Quantity = 0.0 * ureg.mm  # in mm
+    outer_diameter: Quantity = 0.0 * ureg.mm  # in mm
+    inner_diameter: Quantity = 0.0 * ureg.mm   # in mm
+    free_length: Quantity = 0.0 * ureg.mm  # in mm
+    nr_active_coils: float = 0.0
+    pitch: Quantity = 0.0 * ureg.mm  # in mm
     shot_peening: bool = False
-    revestimiento: Optional[str] = None
-    indice_muelle: float = 0.0
-    posiciones: PosicionesTableLineal = PosicionesTableLineal()
-    constante_muelle: Quantity = 0.0 * ureg.N / ureg.mm  # en N/mm
-    factor_wahl: float = 0.0  # factor de Wahl
-    factor_wahl_category: Optional[str] = None  # categoría del factor de Wahl
-    factor_wahl_eval: Optional[float] = None  # factor de Wahl evaluadoSS
-    numero_ciclos: int = 1e6  # Número de ciclos para análisis de fatiga, por defecto 1 millón
-    longitud_posicion: Optional[Quantity] = 0.0 * ureg.mm  # Longitud en la que se aplica la carga para análisis de fatiga
-    carga_posicion: Optional[Quantity] = 0.0 * ureg.N  # Carga en la longitud de posición para análisis de fatiga
-    tension_posicion: Optional[Quantity] = 0.0 * ureg.megapascal  # Tension para la carga para análisis de fatiga
+    coating: Optional[str] = None
+    spring_index: float = 0.0
+    positions: LinearPositionsTable = LinearPositionsTable()
+    spring_constant: Quantity = 0.0 * ureg.N / ureg.mm  # in N/mm
+    wahl_factor: float = 0.0  # Wahl factor
+    wahl_factor_category: Optional[str] = None  # Wahl factor category
+    wahl_factor_eval: Optional[float] = None  # evaluated Wahl factor
+    number_cycles: int = 1e6  # Number of cycles for fatigue analysis, default 1 million
+    position_length: Optional[Quantity] = 0.0 * ureg.mm  # Length at which the load is applied for fatigue analysis
+    position_load: Optional[Quantity] = 0.0 * ureg.N  # Load at the position length for fatigue analysis
+    position_stress: Optional[Quantity] = 0.0 * ureg.megapascal  # Stress from the load for fatigue analysis
 
-    @field_validator('longitud_libre',
-                     'longitud_posicion',
-                     'diametro_exterior',
-                     'diametro_interior',
-                     'diametro_medio',
+    @field_validator('free_length',
+                     'position_length',
+                     'outer_diameter',
+                     'inner_diameter',
+                     'mean_diameter',
                      'pitch',
                      mode='before')
     @classmethod
@@ -52,15 +52,15 @@ class MuelleLineal(WireCharacteristics):
                 else:
                     quantity = ureg(v).to('mm')
                 if quantity.magnitude < 0:
-                    raise ValueError(f'{quantity} debe ser un valor positivo con unidades válidas.')
+                    raise ValueError(f'{quantity} must be a positive value with valid units.')
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar cantidad: {e}')
+                raise ValueError(f'Error validating quantity: {e}')
         return quantity
-    
-    @field_validator('constante_muelle', mode='before')
+
+    @field_validator('spring_constant', mode='before')
     @classmethod
-    def validate_constant_spring(cls, v):
+    def validate_spring_constant(cls, v):
         if v is not None:
             try:
                 if isinstance(v, Quantity):
@@ -70,15 +70,15 @@ class MuelleLineal(WireCharacteristics):
                 else:
                     quantity = ureg(v).to('N/mm')
                 if quantity.magnitude < 0:
-                    raise ValueError(f'{quantity} debe ser un valor positivo con unidades válidas.')
+                    raise ValueError(f'{quantity} must be a positive value with valid units.')
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar cantidad: {e}')
+                raise ValueError(f'Error validating quantity: {e}')
         return quantity
 
-    @field_validator('carga_posicion', mode='before')
+    @field_validator('position_load', mode='before')
     @classmethod
-    def validate_carga_posicion(cls, v):
+    def validate_position_load(cls, v):
         if v is not None:
             try:
                 if isinstance(v, Quantity):
@@ -88,15 +88,15 @@ class MuelleLineal(WireCharacteristics):
                 else:
                     quantity = ureg(v).to('N')
                 if quantity.magnitude < 0:
-                    raise ValueError(f'{quantity} debe ser un valor positivo con unidades válidas.')
+                    raise ValueError(f'{quantity} must be a positive value with valid units.')
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar cantidad: {e}')
+                raise ValueError(f'Error validating quantity: {e}')
         return quantity
-    
-    @field_validator('tension_posicion', mode='before') 
+
+    @field_validator('position_stress', mode='before')
     @classmethod
-    def validate_tension_posicion(cls, v):
+    def validate_position_stress(cls, v):
         if v is not None:
             try:
                 if isinstance(v, Quantity):
@@ -106,121 +106,120 @@ class MuelleLineal(WireCharacteristics):
                 else:
                     quantity = ureg(v).to('MPa')
                 if quantity.magnitude < 0:
-                    raise ValueError(f'{quantity} debe ser un valor positivo con unidades válidas.')
+                    raise ValueError(f'{quantity} must be a positive value with valid units.')
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar cantidad: {e}')
+                raise ValueError(f'Error validating quantity: {e}')
         return quantity
 
-    def __init__(self, material:Material, diametro_hilo: float, **data):
-        """inicializo las variables del muelle a 0"""
-        # Inicializar con valores por defecto
+    def __init__(self, material:Material, wire_diameter: float, **data):
+        """initialize the spring variables to 0"""
+        # Initialize with default values
 
         data.update({
             'material': material,
-            'diametro_hilo': diametro_hilo,
-            'posiciones': PosicionesTableLineal()
+            'wire_diameter': wire_diameter,
+            'positions': LinearPositionsTable()
         })
         super().__init__(**data)
-        self.numero_ciclos = 1e6  # Valor por defecto de 1 millón de ciclos para análisis de fatiga
-        self.shot_peening = False  # Valor por defecto sin shot peening
-    
-    def set_material(self, material:str, diametro_hilo:float):
-        """Primera parte: Establece el material del muelle"""
-        super().set_material(material, diametro_hilo)
+        self.number_cycles = 1e6  # Default value of 1 million cycles for fatigue analysis
+        self.shot_peening = False  # Default value, no shot peening
+
+    def set_material(self, material:str, wire_diameter:float):
+        """First part: set the spring's material"""
+        super().set_material(material, wire_diameter)
         if not isinstance(material, Material):
-            raise ValueError("El material debe ser una instancia de la clase Material")
-        if diametro_hilo is None:
-            raise ValueError("Debe proporcionar el diámetro del hilo para establecer el material")
+            raise ValueError("The material must be an instance of the Material class")
+        if wire_diameter is None:
+            raise ValueError("You must provide the wire diameter to set the material")
 
-    def validate_diameters(self, diametro_medio=None, diametro_exterior=None, diametro_interior=None):
-        """Segunda parte: Valida y establece los diámetros del muelle"""
-        parametres_provided = sum(1 for var in [diametro_exterior, diametro_interior, diametro_medio] if var is not None)
+    def set_diameter(self, mean_diameter=None, outer_diameter=None, inner_diameter=None):
+        """Second part: validate and set the spring diameters"""
+        parametres_provided = sum(1 for var in [outer_diameter, inner_diameter, mean_diameter] if var is not None)
         if parametres_provided != 1:
-            raise ValueError("""Debe proporcionar exactamente una de las siguientes variables:
-                             diametro_exterior, diametro_interior, diametro_medio""")
-        if diametro_exterior is not None:
-            self.diametro_exterior = diametro_exterior
-            self.diametro_medio = self.diametro_exterior - self.diametro_hilo
-            self.diametro_interior = self.diametro_exterior - 2 * self.diametro_hilo
-        elif diametro_interior is not None:
-            self.diametro_interior = diametro_interior
-            self.diametro_medio = self.diametro_interior + self.diametro_hilo
-            self.diametro_exterior = self.diametro_interior + 2 * self.diametro_hilo
-        elif diametro_medio is not None:
-            self.diametro_medio = diametro_medio
-            self.diametro_exterior = self.diametro_medio + self.diametro_hilo
-            self.diametro_interior = self.diametro_medio - self.diametro_hilo
-        self.calcular_factor_de_wahl()
+            raise ValueError("""You must provide exactly one of the following variables:
+                             outer_diameter, inner_diameter, mean_diameter""")
+        if outer_diameter is not None:
+            self.outer_diameter = outer_diameter
+            self.mean_diameter = self.outer_diameter - self.wire_diameter
+            self.inner_diameter = self.outer_diameter - 2 * self.wire_diameter
+        elif inner_diameter is not None:
+            self.inner_diameter = inner_diameter
+            self.mean_diameter = self.inner_diameter + self.wire_diameter
+            self.outer_diameter = self.inner_diameter + 2 * self.wire_diameter
+        elif mean_diameter is not None:
+            self.mean_diameter = mean_diameter
+            self.outer_diameter = self.mean_diameter + self.wire_diameter
+            self.inner_diameter = self.mean_diameter - self.wire_diameter
+        self.calculate_wahl_factor()
 
-    def calcular_indice_muelle(self):
-        """Calcula el índice del muelle"""
-        self.indice_muelle = self.diametro_medio / self.diametro_hilo
-        return self.indice_muelle
-    
-    def set_numero_espiras_utiles(self, numero_espiras_utiles=None, pitch=None, longitud_libre=None):
-        """Establece el número de espiras del muelle"""
-        numero_variables = sum(1 for var in [numero_espiras_utiles, pitch, longitud_libre] if var is not None) 
+    def calculate_spring_index(self):
+        """Calculate the spring index"""
+        self.spring_index = self.mean_diameter / self.wire_diameter
+        return self.spring_index
+
+    def set_nr_active_coils(self, nr_active_coils=None, pitch=None, free_length=None):
+        """Set the number of active spring coils"""
+        numero_variables = sum(1 for var in [nr_active_coils, pitch, free_length] if var is not None)
         if numero_variables != 2:
-            raise ValueError("Debe proporcionar exactamente dos de las tres variables: numero_espiras_utiles, pitch, longitud_libre")
+            raise ValueError("You must provide exactly two of the three variables: nr_active_coils, pitch, free_length")
         if not pitch:
-            self.pitch = longitud_libre / numero_espiras_utiles
-            self.longitud_libre = longitud_libre
-        elif not numero_espiras_utiles:
-            self.numero_espiras_utiles = longitud_libre / pitch
+            self.pitch = free_length / nr_active_coils
+            self.free_length = free_length
+        elif not nr_active_coils:
+            self.nr_active_coils = free_length / pitch
             self.pitch = pitch
-            self.longitud_libre = longitud_libre
-        elif not longitud_libre:
-            self.longitud_libre = numero_espiras_utiles * pitch
+            self.free_length = free_length
+        elif not free_length:
+            self.free_length = nr_active_coils * pitch
             self.pitch = pitch
-    
-    def set_numero_ciclos(self, numero_ciclos):
-        """Establece el número de ciclos para el análisis de fatiga"""
-        self.numero_ciclos = numero_ciclos
-        return self.numero_ciclos
 
-    def calculo_pitch(self, longitud:float):
-        """Calcula el pitch del muelle"""
-        self.longitud_libre = longitud
-        self.pitch = longitud / self.numero_espiras_utiles
+    def set_number_cycles(self, number_cycles):
+        """Set the number of cycles for fatigue analysis"""
+        self.number_cycles = number_cycles
+        return self.number_cycles
+
+    def calculate_pitch(self, length:float):
+        """Calculate the spring pitch"""
+        self.free_length = length
+        self.pitch = length / self.nr_active_coils
         return self.pitch
 
-    def calcular_factor_de_wahl(self):
-        """Calcula el factor de Wahl"""
-        if self.indice_muelle == 0:
-            self.calcular_indice_muelle()
-        self.factor_wahl = (4 * self.indice_muelle - 1) / (4 * self.indice_muelle - 4) + 0.615 / self.indice_muelle
-        """Evalúa el factor de Wahl y lo clasifica en categorías"""
-        if self.factor_wahl < WAHL_FACTOR_CONSTANTS['red'][1]:
-            self.factor_wahl_category = 'red'
-        elif WAHL_FACTOR_CONSTANTS['orange'][0] <= self.factor_wahl < WAHL_FACTOR_CONSTANTS['orange'][1]:
-            self.factor_wahl_category = 'orange'
+    def calculate_wahl_factor(self):
+        """Calculate the Wahl factor"""
+        if self.spring_index == 0:
+            self.calculate_spring_index()
+        self.wahl_factor = (4 * self.spring_index - 1) / (4 * self.spring_index - 4) + 0.615 / self.spring_index
+        """Evaluate the Wahl factor and classify it into categories"""
+        if self.wahl_factor < WAHL_FACTOR_CONSTANTS['red'][1]:
+            self.wahl_factor_category = 'red'
+        elif WAHL_FACTOR_CONSTANTS['orange'][0] <= self.wahl_factor < WAHL_FACTOR_CONSTANTS['orange'][1]:
+            self.wahl_factor_category = 'orange'
         else:
-            self.factor_wahl_category = 'green'
-        return self.factor_wahl, self.factor_wahl_category
+            self.wahl_factor_category = 'green'
+        return self.wahl_factor, self.wahl_factor_category
 
-    def calcular_constante_muelle(self):
-        """Calcula la constante del muelle (N/mm)"""
+    def calculate_spring_constant(self):
+        """Calculate the spring constant (N/mm)"""
         try:
-            self.constante_muelle = (self.material.shear_modulus * np.power(self.diametro_hilo,4)) / (8 * np.power(self.diametro_medio,3) * self.numero_espiras_utiles)
+            self.spring_constant = (self.material.shear_modulus * np.power(self.wire_diameter,4)) / (8 * np.power(self.mean_diameter,3) * self.nr_active_coils)
         except ValueError:
-            raise ValueError("No se puede calcular la constante del muelle sin el diámetro medio")
-        return self.constante_muelle
+            raise ValueError("Cannot calculate the spring constant without the mean diameter")
+        return self.spring_constant
 
-    def calcula_carga_en_posicion(self, longitud:float, spring_class=COMPRESSION):
-        """Calcula la carga en una posición dada usando la constante del muelle"""
-        if self.constante_muelle == 0:
-            self.calcular_constante_muelle()
-        self.longitud_posicion = longitud
-        self.carga_posicion = spring_class * self.constante_muelle * (self.longitud_libre - self.longitud_posicion)
-        self.calcula_tension_en_posicion()
-        return self.carga_posicion
+    def calculate_load_at_position(self, length:float, spring_class=COMPRESSION):
+        """Calculate the load at a given position using the spring constant"""
+        if self.spring_constant == 0:
+            self.calculate_spring_constant()
+        self.position_length = length
+        self.position_load = spring_class * self.spring_constant * (self.free_length - self.position_length)
+        self.calculate_stress_at_position()
+        return self.position_load
 
-    def calcula_tension_en_posicion(self):
-        """Calcula la tensión en el hilo del muelle en una posición prdefinida dada"""
+    def calculate_stress_at_position(self):
+        """Calculate the stress in the spring wire at a given predefined position"""
         try:
-            tension = (8 * self.diametro_medio * self.carga_posicion) / (3.1416 * self.diametro_hilo**3) * self.factor_wahl
-            return tension
+            stress = (8 * self.mean_diameter * self.position_load) / (3.1416 * self.wire_diameter**3) * self.wahl_factor
+            return stress
         except ValueError as e:
-            raise ValueError(f"Error al calcular la tensión en posición {self.longitud_posicion}: {e}")
-
+            raise ValueError(f"Error calculating stress at position {self.position_length}: {e}")

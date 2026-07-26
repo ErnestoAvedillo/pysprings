@@ -1,57 +1,57 @@
-from muelles.lineal.goodman import GoodmanAnalyzer, GoodmanData
+from springcalc.lineal.goodman import GoodmanAnalyzer, GoodmanData
 import matplotlib.pyplot as plt
 import numpy as np
 import io
 import base64
 
 
-def generate_goodman_diagram(muelle, longitud_inicial, longitud_final, shot_peening=False,numero_ciclos=1e6):
-    """Genera el diagrama de Goodman para el muelle"""
+def generate_goodman_diagram(spring, initial_length, final_length, shot_peening=False, number_cycles=1e6):
+    """Generate the Goodman diagram for the spring"""
     try:
-        # Calcular tensiones máxima y mínima
-        deformacion_max = muelle.longitud_libre - longitud_final
-        deformacion_min = muelle.longitud_libre - longitud_inicial
-        
-        carga_max = muelle.constante_muelle * deformacion_max if deformacion_max > 0 else 0
-        carga_min = muelle.constante_muelle * deformacion_min if deformacion_min > 0 else 0
-        
-        # Tensión de cortante usando fórmula de Wahl
-        tension_max = (8 * carga_max * muelle.diametro_medio * muelle.factor_wahl) / (np.pi * muelle.diametro_hilo**3) if carga_max > 0 else 0
-        tension_min = (8 * carga_min * muelle.diametro_medio * muelle.factor_wahl) / (np.pi * muelle.diametro_hilo**3) if carga_min > 0 else 0
-        
-        # Crear análisis de Goodman
+        # Calculate the maximum and minimum stresses
+        max_deflection = spring.free_length - final_length
+        min_deflection = spring.free_length - initial_length
+
+        max_load = spring.spring_constant * max_deflection if max_deflection > 0 else 0
+        min_load = spring.spring_constant * min_deflection if min_deflection > 0 else 0
+
+        # Shear stress using the Wahl formula
+        max_stress = (8 * max_load * spring.mean_diameter * spring.wahl_factor) / (np.pi * spring.wire_diameter**3) if max_load > 0 else 0
+        min_stress = (8 * min_load * spring.mean_diameter * spring.wahl_factor) / (np.pi * spring.wire_diameter**3) if min_load > 0 else 0
+
+        # Create the Goodman analysis
         goodman_data = GoodmanData(
-            material=muelle.material,
-            diameter=muelle.diametro_hilo,
-            carga="torsion",  # Para muelles helicoidales es carga de torsión
-            numero_ciclos=numero_ciclos
+            material=spring.material,
+            diameter=spring.wire_diameter,
+            load_type="torsion",  # For helical springs this is torsional load
+            number_cycles=number_cycles
         )
-        
+
         analyzer = GoodmanAnalyzer(goodman_data, shot_peening=shot_peening)
-        
-        # Generar diagrama
-        fig = analyzer.plot_diagram(tension_max, tension_min, show_plot=False)
-        
-        # Guardar diagrama en base64
+
+        # Generate the diagram
+        fig = analyzer.plot_diagram(max_stress, min_stress, show_plot=False)
+
+        # Save the diagram as base64
         buffer = io.BytesIO()
         fig.savefig(buffer, format='png', dpi=100, bbox_inches='tight')
         buffer.seek(0)
-        goodman_imagen = base64.b64encode(buffer.getvalue()).decode()
+        goodman_image = base64.b64encode(buffer.getvalue()).decode()
         plt.close()
-        
-        # Obtener resumen del análisis
-        analisis = analyzer.get_analysis_summary(tension_max, tension_min)
-        
+
+        # Get the analysis summary
+        analysis = analyzer.get_analysis_summary(max_stress, min_stress)
+
         return {
-            'imagen': goodman_imagen,
-            'analisis': analisis,
-            'tensiones': {
-                'tension_max': round(tension_max, 2),
-                'tension_min': round(tension_min, 2),
-                'carga_max': round(carga_max, 2),
-                'carga_min': round(carga_min, 2)
+            'image': goodman_image,
+            'analysis': analysis,
+            'stresses': {
+                'stress_max': round(max_stress, 2),
+                'stress_min': round(min_stress, 2),
+                'load_max': round(max_load, 2),
+                'load_min': round(min_load, 2)
             }
         }
     except Exception as e:
-        print(f"Error generando diagrama de Goodman: {e}")
+        print(f"Error generating Goodman diagram: {e}")
         return None

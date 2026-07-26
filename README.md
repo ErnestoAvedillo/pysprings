@@ -1,53 +1,64 @@
-# muelles
+# springcalc
 
-Biblioteca de Python para el **cálculo de muelles** (resortes): compresión, tracción
-y torsión. Incluye datos de materiales, cálculo de características del hilo y análisis
-de fatiga mediante el diagrama de Goodman.
+A Python library for **spring calculations**: compression, extension, and
+torsion springs. Includes material data, wire characteristic calculations,
+and fatigue analysis via the Goodman diagram.
 
-> El código se extrajo de una aplicación web Django y se reorganizó como biblioteca
-> independiente. La capa web (vistas, plantillas, `static/`) no forma parte de la
-> biblioteca.
+> The code was extracted from a Django web application and reorganized as a
+> standalone library. The web layer (views, templates, `static/`) is not part
+> of the library.
 
-## Estructura
+## Structure
 
 ```
-src/muelles/            Paquete de la biblioteca
-├── lineal/             Motor de cálculo (compresión, tracción, torsión, Goodman)
-├── pymodels/           Modelos de datos (pydantic): material, unidades, hilo, posiciones
-├── material/           Tablas de materiales y tolerancias (CSV, datos de paquete)
-├── regresiones/        Modelos ajustados cargados en runtime
-│   └── factor_f/       Factor f de Shigley (modelo .pkl + cargador)
-└── plots/              Generación del diagrama de Goodman
+src/springcalc/         Library package
+├── lineal/             Calculation engine (compression, extension, torsion, Goodman)
+├── pymodels/           Data models (pydantic): material, units, wire, positions
+├── material/           Material and tolerance tables (CSV, package data)
+├── regresiones/        Fitted models loaded at runtime
+│   └── factor_f/       Shigley's factor f (plain JSON coefficients + loader)
+├── plots/              Goodman diagram generation
+└── report/             PDF report generation (SpringPDFReport)
 
 tests/                  Tests (pytest)
-scripts/regresiones/    Scripts de entrenamiento que generan los .pkl (no runtime)
-docs/                   Material de referencia (hoja de cálculo, figuras)
+scripts/regresiones/    Training scripts that regenerate the JSON coefficients (not runtime)
+docs/                   Reference material (spreadsheet, figures)
 ```
 
-## Instalación
+## Installation
 
-El proyecto usa [uv](https://docs.astral.sh/uv/):
+The project uses [uv](https://docs.astral.sh/uv/):
 
 ```bash
-uv sync                 # crea el entorno e instala dependencias
+uv sync                 # create the environment and install dependencies
 ```
 
-O con pip en modo editable:
+Or with pip in editable mode:
 
 ```bash
 pip install -e ".[dev]"
 ```
 
-## Uso
+## Usage
 
 ```python
-from muelles import Material, MuelleCompresion
+from springcalc import Material, CompressionSpring
 
-material = Material(nombre_material="SH")
-muelle = MuelleCompresion(material=material, diametro_hilo=2.0)
-muelle.numero_espiras = 8
-print(muelle.calcular_longitud_bloqueo())
-print(muelle.calcular_paso())
+material = Material(material_name="SH")
+spring = CompressionSpring(material=material, wire_diameter=2.0)
+spring.nr_coils = 8
+print(spring.calculate_solid_length())
+print(spring.calculate_pitch())
+```
+
+Generating a PDF report (spring data, load/travel/diameter curves, and the
+Goodman fatigue diagram):
+
+```python
+from springcalc.report import SpringPDFReport
+
+report = SpringPDFReport(spring, title="Spring XYZ-123")
+report.build("spring_report.pdf")
 ```
 
 ## Tests
@@ -56,9 +67,9 @@ print(muelle.calcular_paso())
 uv run pytest
 ```
 
-## Reentrenar los modelos de regresión
+## Retraining the regression models
 
-Los `.pkl` incluidos ya están entrenados. Para regenerarlos:
+The included JSON coefficient files are already fitted. To regenerate them:
 
 ```bash
 uv run python scripts/regresiones/factor_f/factor_f.py

@@ -1,69 +1,74 @@
-""" El modelo de regresión polinomial grado 2 se utiliza para ajustar una curva descendente a los datos
-de factor f vs Sut. Shigley Diseño de ingenieria mecánica, 9na edición, pág. 272 gráfica 6-18"""
+""" The degree-2 polynomial regression model is used to fit a descending curve to the
+factor f vs Sut data. Shigley Mechanical Engineering Design, 9th edition, p. 272, chart 6-18"""
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.metrics import r2_score
 from pandas import read_csv
-import pickle
+import json
 import os
 
-# Rutas relativas al script para que funcione en cualquier máquina.
+# Paths relative to the script so it works on any machine.
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, "..", "..", ".."))
-# El modelo entrenado se guarda dentro del paquete, donde lo carga en runtime
-# muelles.regresiones.factor_f.usar_modelo_factor_f.
-MODELO_SALIDA = os.path.join(
-    REPO_ROOT, "src", "muelles", "regresiones", "factor_f", "modelo_factor_f.pkl"
+# The fitted coefficients are saved inside the package, where they are loaded at
+# runtime by springcalc.regresiones.factor_f.usar_modelo_factor_f. Only plain
+# numbers are shipped (no pickled sklearn objects) so the library never depends
+# on the scikit-learn version used at training time.
+COEFS_SALIDA = os.path.join(
+    REPO_ROOT, "src", "springcalc", "regresiones", "factor_f", "factor_f_coeffs.json"
 )
 
-# 1. Datos que forman una curva descendente
+# 1. Data forming a descending curve
 file = os.path.join(SCRIPT_DIR, "factor__f_vs_RMa.csv")
-pd = read_csv(file, header=0, skipinitialspace=True)  # skipinitialspace maneja espacios después de comas
-X = pd["Sut"].values.reshape(-1, 1)  # Reshape para que sea una matriz de una columna
-y = pd["valor_f"].values.reshape(-1, 1)  # Reshape para que sea una matriz de una columna
-X = np.log(X)  # Transformamos y para que sea una curva descendente
-y = np.log(y)  # Transformamos y para que sea una curva descendente
-# 2. Transformamos X para que el modelo entienda curvas (grado 2)
-# Esto convierte X en [X, X^2]
+pd = read_csv(file, header=0, skipinitialspace=True)  # skipinitialspace handles spaces after commas
+X = pd["Sut"].values.reshape(-1, 1)  # Reshape into a single-column matrix
+y = pd["valor_f"].values.reshape(-1, 1)  # Reshape into a single-column matrix
+X = np.log(X)  # Transform X so it becomes a descending curve
+y = np.log(y)  # Transform y so it becomes a descending curve
+# 2. Transform X so the model can capture curves (degree 2)
+# This turns X into [X, X^2]
 poly = PolynomialFeatures(degree=2)
 X_poly = poly.fit_transform(X)
 
-# 3. Entrenamos el modelo con los datos transformados
-modelo_curvo = LinearRegression()
-modelo_curvo.fit(X_poly, y)
+# 3. Train the model with the transformed data
+curve_model = LinearRegression()
+curve_model.fit(X_poly, y)
 
-# Guardamos el modelo completo (modelo + transformador polinomial)
-modelo_completo = {
-    'modelo': modelo_curvo,
-    'poly_transformer': poly,
-    'info': {
-        'descripcion': 'Modelo de regresión polinomial grado 2 para factor f vs Sut',
-        'entrada': 'Sut (debe aplicarse log natural antes)',
-        'salida': 'factor f'
-    }
+# Fold the PolynomialFeatures bias column into the model intercept, so the
+# saved coefficients are a plain ascending-power polynomial: c0 + c1*x + c2*x^2.
+# NOTE: key 'coefficients_ascending_powers' is the on-disk contract read by
+# usar_modelo_factor_f.py.
+coefficients = curve_model.coef_[0].copy()
+coefficients[0] += curve_model.intercept_[0]
+coeffs_data = {
+    'descripcion': 'Degree-2 polynomial regression model for factor f vs Sut',
+    'entrada': 'Sut (natural log must be applied beforehand)',
+    'salida': 'factor f',
+    'coefficients_ascending_powers': coefficients.tolist(),
 }
 
-# Guardar en archivo pickle
-with open(MODELO_SALIDA, 'wb') as f:
-    pickle.dump(modelo_completo, f)
+# Save as plain JSON (no pickled sklearn objects, so the library never depends
+# on the scikit-learn version used at training time).
+with open(COEFS_SALIDA, 'w') as f:
+    json.dump(coeffs_data, f, indent=4)
 
-print("Modelo guardado exitosamente en 'modelo_factor_f.pkl'")
+print(f"Coefficients saved successfully to '{COEFS_SALIDA}'")
 
-# 4. Predicción y Visualización
-y_fit = modelo_curvo.predict(poly.transform(X))
+# 4. Prediction and visualization
+y_fit = curve_model.predict(poly.transform(X))
 
-# Calcular R² (coeficiente de determinación) como medida de precisión
+# Calculate R² (coefficient of determination) as an accuracy measure
 r2 = r2_score(y, y_fit)
 
-plt.scatter(X, y, color='blue', label='Datos reales')
-plt.plot(X, y_fit, color='green', label=f'Regresión Polinomial (R² = {r2:.4f})')
-plt.title('Ajuste de Curva Descendente')
+plt.scatter(X, y, color='blue', label='Actual data')
+plt.plot(X, y_fit, color='green', label=f'Polynomial Regression (R² = {r2:.4f})')
+plt.title('Descending Curve Fit')
 plt.xlabel('log(Sut)')
 plt.ylabel('factor f')
 plt.legend()
 plt.grid(True, alpha=0.3)
 plt.show()
 
-print(f"Precisión del modelo (R²): {r2:.4f} ({r2*100:.2f}%)")
+print(f"Model accuracy (R²): {r2:.4f} ({r2*100:.2f}%)")

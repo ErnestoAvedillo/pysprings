@@ -3,7 +3,7 @@ from pint import Quantity
 import numpy as np
 from pydantic import ConfigDict, field_validator
 from ..pymodels.units import ureg
-from .constants import WAHL_FACTOR_CONSTANTS, TIPOS_FINAL_MUELLE_COMPRESION
+from .constants import WAHL_FACTOR_CONSTANTS, COMPRESSION_SPRING_END_TYPES
 from ..pymodels.wire_characteristics import WireCharacteristics
 from typing import Optional
 from pint import Quantity
@@ -13,34 +13,34 @@ import numpy as np
 from scipy.integrate import quad
 from scipy.optimize import fsolve
 
-# (Conserva tus otras importaciones: ureg, WireCharacteristics, Material, etc.)
+# (Keep your other imports: ureg, WireCharacteristics, Material, etc.)
 
 
-class MuelleLineal(WireCharacteristics):
+class VariableLinealSpring(WireCharacteristics):
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
-    
-    # --- Parámetros base del muelle genérico ---
-    longitud_libre: Quantity = 0.0 * ureg.mm
-    numero_espiras_utiles: float = 0.0
+
+    # --- Base parameters of the generic spring ---
+    free_length: Quantity = 0.0 * ureg.mm
+    nr_active_coils: float = 0.0
     shot_peening: bool = False
-    revestimiento: Optional[str] = None
-    indice_muelle: float = 0.0  # Nota: En geometrías variables, este índice varía localmente.
-    
-    # --- NUEVO: Atributos funcionales para Geometría Variable ---
-    # Almacenan funciones que reciben la altura 'h' (Quantity) y devuelven Quantity
-    f_diametro_medio: Callable[[Quantity], Quantity] = lambda h: 0.0 * ureg.mm
+    coating: Optional[str] = None
+    spring_index: float = 0.0  # Note: for variable geometries this index varies locally.
+
+    # --- NEW: functional attributes for variable geometry ---
+    # Store functions that receive the height 'h' (Quantity) and return a Quantity
+    f_mean_diameter: Callable[[Quantity], Quantity] = lambda h: 0.0 * ureg.mm
     f_pitch: Callable[[Quantity], Quantity] = lambda h: 0.0 * ureg.mm
 
-    # Guardamos límites físicos para inicializaciones rápidas
-    diametro_ini_medio: Quantity = 0.0 * ureg.mm
-    pitch_constante: Quantity = 0.0 * ureg.mm
-    longitud_hilo: Quantity = 0.0 * ureg.mm
-    tipo_final: str = "rectificado"
-    tipo_conformado: str = "frio"
-    theta_max: float = 0.0  # Ángulo total de rotación de la hélice (radianes)
+    # Keep physical bounds for quick initializations
+    mean_diameter_init: Quantity = 0.0 * ureg.mm
+    pitch_constant: Quantity = 0.0 * ureg.mm
+    wire_length: Quantity = 0.0 * ureg.mm
+    type_of_end: str = "ground"
+    type_conforming: str = "cold"
+    theta_max: float = 0.0  # Total helix rotation angle (radians)
 
-    # --- Tus validadores se mantienen igual (reducidos aquí por espacio) ---
-    @field_validator('longitud_libre', mode='before')
+    # --- Your validators stay the same (trimmed here for brevity) ---
+    @field_validator('free_length', mode='before')
     @classmethod
     def validate_dimensions(cls, v):
         if v is not None:
@@ -49,219 +49,219 @@ class MuelleLineal(WireCharacteristics):
             return float(v) * ureg.mm
         return v
 
-    def __init__(self, material, diametro_hilo: float, **data):
-        super().__init__(material, diametro_hilo, **data)
-        
-        # Por defecto, si no se pasan funciones personalizadas, inicializar como lineal constante
-        if 'f_diametro_medio' not in data:
-            self.f_diametro_medio = lambda h: self.diametro_ini_medio
-        if 'f_pitch' not in data:
-            self.f_pitch = lambda h: self.pitch_constante
+    def __init__(self, material, wire_diameter: float, **data):
+        super().__init__(material, wire_diameter, **data)
 
-    def establecer_funciones_geometricas(self, func_D: Callable[[Quantity], Quantity], func_p: Callable[[Quantity], Quantity]):
-        """Permite inyectar cualquier geometría variable al muelle"""
-        self.f_diametro_medio = func_D
+        # By default, if no custom functions are given, initialize as a constant linear spring
+        if 'f_mean_diameter' not in data:
+            self.f_mean_diameter = lambda h: self.mean_diameter_init
+        if 'f_pitch' not in data:
+            self.f_pitch = lambda h: self.pitch_constant
+
+    def establish_geometrical_function(self, func_D: Callable[[Quantity], Quantity], func_p: Callable[[Quantity], Quantity]):
+        """Allows injecting any variable geometry into the spring"""
+        self.f_mean_diameter = func_D
         self.f_pitch = func_p
 
-    def calcular_indice_muelle_local(self, h: Quantity) -> float:
-        """El índice de muelle ahora depende de en qué parte (h) del muelle midas"""
-        D_local = self.f_diametro_medio(h)
-        return float(D_local.to('mm').magnitude / self.diametro_hilo.to('mm').magnitude)
+    def calculate_spring_index_local(self, h: Quantity) -> float:
+        """The spring index now depends on which part (h) of the spring you measure"""
+        D_local = self.f_mean_diameter(h)
+        return float(D_local.to('mm').magnitude / self.wire_diameter.to('mm').magnitude)
 
-    def calcular_theta_max(self) -> float:
+    def calculate_theta_max(self) -> float:
         """
-        Determina theta_max integrando: d_theta = (2*pi / p(h)) * dh
-        desde h = 0 hasta longitud_libre.
+        Determines theta_max by integrating: d_theta = (2*pi / p(h)) * dh
+        from h = 0 to free_length.
         """
-        H_val = self.longitud_libre.to('mm').magnitude
+        H_val = self.free_length.to('mm').magnitude
 
-        # Función integranda: extrae la magnitud en mm del paso local
-        def integrando(h_mm):
-            pitch_local = self.f_pitch(h_mm * ureg.mm).to('mm').magnitude
-            if pitch_local <= 0:
-                raise ValueError("El paso (pitch) en cualquier punto de h debe ser mayor que cero.")
-            return (2 * np.pi) / pitch_local
+        # Integrand function: extracts the magnitude in mm of the local pitch
+        def integrand(h_mm):
+            local_pitch = self.f_pitch(h_mm * ureg.mm).to('mm').magnitude
+            if local_pitch <= 0:
+                raise ValueError("The pitch at any point of h must be greater than zero.")
+            return (2 * np.pi) / local_pitch
 
-        theta_max, _ = quad(integrando, 0, H_val)
+        theta_max, _ = quad(integrand, 0, H_val)
         self.theta_max = theta_max
-        # Actualizar número de espiras totales
-        self.numero_espiras = theta_max / (2 * np.pi)
+        # Update the total number of coils
+        self.nr_coils = theta_max / (2 * np.pi)
         return self.theta_max
 
-    def obtener_desarrollo_h_theta(self, num_puntos=500):
+    def get_h_theta_development(self, num_points=500):
         """
-        Resuelve la correspondencia entre el ángulo theta y la altura h.
-        Devuelve arrays de numpy en milímetros.
+        Solves the correspondence between the angle theta and the height h.
+        Returns numpy arrays in millimeters.
         """
         if self.theta_max == 0:
-            self.calcular_theta_max()
-            
-        thetas = np.linspace(0, self.theta_max, num_puntos)
-        zs = np.zeros(num_puntos)
-       
-        # Resolvemos numéricamente la integral acumulada para cada ángulo
+            self.calculate_theta_max()
+
+        thetas = np.linspace(0, self.theta_max, num_points)
+        zs = np.zeros(num_points)
+
+        # Numerically solve the cumulative integral for each angle
         for i, theta in enumerate(thetas):
             if i == 0:
                 zs[i] = 0.0
                 continue
-            
-            def ecuacion(z_test):
-                # Integral desde 0 hasta z_test de (2*pi / p(h)) dh
+
+            def equation(z_test):
+                # Integral from 0 to z_test of (2*pi / p(h)) dh
                 val, _ = quad(lambda h: (2 * np.pi) / self.f_pitch(h * ureg.mm).to('mm').magnitude, 0, z_test)
                 return val - theta
-            
-            # Buscamos la raíz (estimación inicial = punto anterior)
-            zs[i] = fsolve(ecuacion, zs[i-1])[0]
-            
+
+            # Find the root (initial guess = previous point)
+            zs[i] = fsolve(equation, zs[i-1])[0]
+
         return thetas, zs
 
- 
-    def calcular_longitud_hilo(self, num_puntos=500) -> Quantity:
-        """Calcula la longitud del alambre mediante integración del diferencial de arco (ds)"""
-        thetas, zs = self.obtener_desarrollo_h_theta(num_puntos)
-        
-        # Obtener diámetros en cada paso de z
-        Ds = np.array([self.f_diametro_medio(z * ureg.mm).to('mm').magnitude for z in zs])
-        radios = Ds / 2.0
-        
-        # Coordenadas cartesianas 3D del eje
-        xs = radios * np.cos(thetas)
-        ys = radios * np.sin(thetas)
-        
-        # Derivadas numéricas respecto a theta
+
+    def calculate_wire_length(self, num_points=500) -> Quantity:
+        """Calculate the wire length by integrating the arc-length differential (ds)"""
+        thetas, zs = self.get_h_theta_development(num_points)
+
+        # Get diameters at each z step
+        Ds = np.array([self.f_mean_diameter(z * ureg.mm).to('mm').magnitude for z in zs])
+        radii = Ds / 2.0
+
+        # 3D cartesian coordinates of the axis
+        xs = radii * np.cos(thetas)
+        ys = radii * np.sin(thetas)
+
+        # Numerical derivatives with respect to theta
         dtheta = thetas[1] - thetas[0]
         dx_dtheta = np.gradient(xs, dtheta)
         dy_dtheta = np.gradient(ys, dtheta)
         dz_dtheta = np.gradient(zs, dtheta)
-        
+
         # ds = sqrt( dx^2 + dy^2 + dz^2 )
         ds = np.sqrt(dx_dtheta**2 + dy_dtheta**2 + dz_dtheta**2)
-        
-        # Longitud total integrada
+
+        # Total integrated length
         L_mm = np.trapz(ds, thetas)
-        self.longitud_hilo = L_mm * ureg.mm
-        return self.longitud_hilo
+        self.wire_length = L_mm * ureg.mm
+        return self.wire_length
 
 
-    
-    def calcular_constante_muelle(self, num_puntos=500) -> Quantity:
+
+    def calculate_spring_constant(self, num_points=500) -> Quantity:
         """
-        Calcula la rigidez del muelle equivalente (K) considerando las espiras en serie.
+        Calculate the equivalent spring stiffness (K) considering the coils in series.
         1/K = integral_0^theta_max [ 8 * D(theta)^3 / (G * d^4 * 2*pi) ] dtheta
         """
-        thetas, zs = self.obtener_desarrollo_h_theta(num_puntos)
-        Ds = np.array([self.f_diametro_medio(z * ureg.mm).to('mm').magnitude for z in zs])
-        
-        d_val = self.diametro_hilo.to('mm').magnitude
-        # Acceder al módulo de corte del material (asegura que esté en MPa o N/mm²)
-        G_val = self.material.shear_modulus.to('N/mm**2').magnitude 
-        
-        # Función integranda para la flexibilidad local (1/dK)
-        flexibilidad_local = (8 * Ds**3) / (G_val * (d_val**4) * 2 * np.pi)
-        
-        # Integral numérica mediante regla del trapecio
-        flexibilidad_total = np.trapz(flexibilidad_local, thetas)
-        
-        K_val = 1.0 / flexibilidad_total  # N/mm
-        self.constante_muelle = K_val * (ureg.N / ureg.mm)
-        return self.constante_muelle
+        thetas, zs = self.get_h_theta_development(num_points)
+        Ds = np.array([self.f_mean_diameter(z * ureg.mm).to('mm').magnitude for z in zs])
 
-    def simular_compresion_progresiva(self, deflexion_max: Quantity, pasos: int = 100, num_puntos: int = 500):
-        """
-        Simula la compresión paso a paso considerando el contacto oblicuo entre espiras.
-        Retorna la curva de fuerza vs deformación y la evolución de la rigidez instantánea.
-        """
-        # 1. Obtener la trayectoria inicial en estado libre (sin carga)
-        thetas, zs_libre = self.obtener_desarrollo_h_theta(num_puntos)
-        Ds = np.array([self.f_diametro_medio(z * ureg.mm).to('mm').magnitude for z in zs_libre])
-        radios = Ds / 2.0
-        
-        d_val = self.diametro_hilo.to('mm').magnitude
+        d_val = self.wire_diameter.to('mm').magnitude
+        # Access the material's shear modulus (ensure it's in MPa or N/mm²)
         G_val = self.material.shear_modulus.to('N/mm**2').magnitude
-        
-        # Guardaremos el estado de compresión en cada paso
-        historial_deflexion = []
-        historial_fuerza = []
-        historial_K = []
-        
-        # El paso angular para una vuelta completa (para comparar espiras adyacentes)
-        # Buscamos cuántos puntos de la discretización equivalen a 2*pi radianes
+
+        # Integrand function for the local flexibility (1/dK)
+        local_flexibility = (8 * Ds**3) / (G_val * (d_val**4) * 2 * np.pi)
+
+        # Numerical integration using the trapezoidal rule
+        total_flexibility = np.trapz(local_flexibility, thetas)
+
+        K_val = 1.0 / total_flexibility  # N/mm
+        self.spring_constant = K_val * (ureg.N / ureg.mm)
+        return self.spring_constant
+
+    def simulate_progressive_compression(self, max_deflection: Quantity, steps: int = 100, num_points: int = 500):
+        """
+        Simulates step-by-step compression accounting for oblique contact between coils.
+        Returns the force vs. deflection curve and the evolution of the instantaneous stiffness.
+        """
+        # 1. Get the initial free-state (unloaded) trajectory
+        thetas, zs_free = self.get_h_theta_development(num_points)
+        Ds = np.array([self.f_mean_diameter(z * ureg.mm).to('mm').magnitude for z in zs_free])
+        radii = Ds / 2.0
+
+        d_val = self.wire_diameter.to('mm').magnitude
+        G_val = self.material.shear_modulus.to('N/mm**2').magnitude
+
+        # We'll store the compression state at each step
+        deflection_history = []
+        force_history = []
+        stiffness_history = []
+
+        # Angular step for one full turn (to compare adjacent coils)
+        # Find how many discretization points equal 2*pi radians
         dtheta = thetas[1] - thetas[0]
-        puntos_una_vuelta = int(round((2 * np.pi) / dtheta))
-        
-        # Inicializamos la fuerza acumulada y la deformación
-        fuerza_actual = 0.0 # Newtons
-        # Deformación de cada punto del eje z
-        delta_y = np.zeros_like(zs_libre)
-        
-        deflexion_objetivo_max = deflexion_max.to('mm').magnitude
-        paso_deflexion = deflexion_objetivo_max / pasos
-        
-        for paso in range(pasos + 1):
-            deflexion_actual = paso * paso_deflexion
-            
-            # --- DETECCIÓN DE CONTACTO OBLICUO ---
-            # Creamos una máscara de zonas activas (1.0 = activa, 0.0 = colisionada/bloqueada)
-            es_activa = np.ones_like(thetas)
-            
-            for i in range(len(thetas) - puntos_una_vuelta):
-                # Índice de la espira superior adyacente
-                i_sup = i + puntos_una_vuelta
-                
-                # Distancia vertical actual en mm
-                z_inf_actual = zs_libre[i] - delta_y[i]
-                z_sup_actual = zs_libre[i_sup] - delta_y[i_sup]
+        points_per_turn = int(round((2 * np.pi) / dtheta))
+
+        # Initialize the accumulated force and deformation
+        current_force = 0.0 # Newtons
+        # Deformation of each point along the z axis
+        delta_y = np.zeros_like(zs_free)
+
+        target_max_deflection = max_deflection.to('mm').magnitude
+        deflection_step = target_max_deflection / steps
+
+        for step in range(steps + 1):
+            current_deflection = step * deflection_step
+
+            # --- OBLIQUE CONTACT DETECTION ---
+            # Build a mask of active zones (1.0 = active, 0.0 = collided/locked)
+            is_active = np.ones_like(thetas)
+
+            for i in range(len(thetas) - points_per_turn):
+                # Index of the adjacent upper coil
+                i_sup = i + points_per_turn
+
+                # Current vertical distance in mm
+                z_inf_actual = zs_free[i] - delta_y[i]
+                z_sup_actual = zs_free[i_sup] - delta_y[i_sup]
                 Pz_actual = abs(z_sup_actual - z_inf_actual)
-                
-                # Diferencia de radios (geometría variable)
-                delta_R = abs(radios[i_sup] - radios[i])
-                
-                # Condición de colisión
+
+                # Radius difference (variable geometry)
+                delta_R = abs(radii[i_sup] - radii[i])
+
+                # Collision condition
                 if delta_R < d_val:
-                    # Límite oblicuo de colisión física
+                    # Oblique physical collision limit
                     Pz_limite = np.sqrt(d_val**2 - delta_R**2)
                     if Pz_actual <= Pz_limite:
-                        # Si colisionan, ambas secciones y las intermedias se desactivan
-                        es_activa[i:i_sup+1] = 0.0
+                        # If they collide, both sections and everything in between are deactivated
+                        is_active[i:i_sup+1] = 0.0
                 else:
-                    # Si delta_R >= d, hay telescopaje. No hay colisión directa por encima,
-                    # pero hay que vigilar si llega al plano del suelo del muelle si se aplasta del todo.
+                    # If delta_R >= d, there is telescoping. No direct collision above,
+                    # but we need to watch whether it reaches the spring's floor plane once fully flattened.
                     pass
-            
-            # --- CÁLCULO DE LA RIGIDEZ INSTANTÁNEA K_inst ---
-            # Flexibilidad local diferencial: si no es activa, su flexibilidad es 0 (rigidez infinita)
-            flexibilidad_local = (8 * Ds**3) / (G_val * (d_val**4) * 2 * np.pi)
-            flexibilidad_local_activa = flexibilidad_local * es_activa
-            
-            flex_total = np.trapz(flexibilidad_local_activa, thetas)
-            
-            if flex_total <= 1e-9:
-                # El muelle ha llegado al bloqueo completo (solid height)
+
+            # --- INSTANTANEOUS STIFFNESS CALCULATION (K_inst) ---
+            # Local differential flexibility: if not active, its flexibility is 0 (infinite stiffness)
+            local_flexibility = (8 * Ds**3) / (G_val * (d_val**4) * 2 * np.pi)
+            active_local_flexibility = local_flexibility * is_active
+
+            total_flex = np.trapz(active_local_flexibility, thetas)
+
+            if total_flex <= 1e-9:
+                # The spring has reached full lock-up (solid height)
                 K_inst = float('inf')
             else:
-                K_inst = 1.0 / flex_total
-            
-            # --- ACTUALIZAR FUERZA Y DEFORMACIÓN ---
-            if paso > 0:
-                # dF = K_inst * d_deflexion
-                incremento_fuerza = K_inst * paso_deflexion if K_inst != float('inf') else 0.0
-                fuerza_actual += incremento_fuerza
-                
-                # Distribuir la deformación diferencial localmente. 
-                # Las zonas más flexibles (mayor diámetro o activas) se deforman más.
+                K_inst = 1.0 / total_flex
+
+            # --- UPDATE FORCE AND DEFORMATION ---
+            if step > 0:
+                # dF = K_inst * d_deflection
+                force_increment = K_inst * deflection_step if K_inst != float('inf') else 0.0
+                current_force += force_increment
+
+                # Distribute the differential deformation locally.
+                # The more flexible zones (larger diameter or active) deform more.
                 if K_inst != float('inf'):
-                    # La deformación local proporcional a la flexibilidad local
-                    factor_deformacion = flexibilidad_local_activa / flex_total
-                    delta_y += factor_deformacion * paso_deflexion
-            
-            historial_deflexion.append(deflexion_actual)
-            historial_fuerza.append(fuerza_actual)
-            historial_K.append(K_inst)
-            
+                    # Local deformation proportional to the local flexibility
+                    deformation_factor = active_local_flexibility / total_flex
+                    delta_y += deformation_factor * deflection_step
+
+            deflection_history.append(current_deflection)
+            force_history.append(current_force)
+            stiffness_history.append(K_inst)
+
             if K_inst == float('inf'):
-                # Si se bloquea por completo el muelle, terminamos la simulación
+                # If the spring is fully locked, end the simulation
                 break
 
-        return (np.array(historial_deflexion) * ureg.mm, 
-                np.array(historial_fuerza) * ureg.N, 
-                np.array(historial_K) * (ureg.N / ureg.mm))
+        return (np.array(deflection_history) * ureg.mm,
+                np.array(force_history) * ureg.N,
+                np.array(stiffness_history) * (ureg.N / ureg.mm))

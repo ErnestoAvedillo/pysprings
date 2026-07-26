@@ -1,44 +1,46 @@
-from muelles.lineal.compresion import MuelleLineal
-from muelles.pymodels.material import Material
+from springcalc.lineal.compresion import CompressionSpring
+from springcalc.pymodels.material import Material
 
-# Crear material primero
-material = Material(nombre_material="SL")
+# Create the material first
+material = Material(material_name="SL")
 
-# Crear muelle con la clase correcta
-muelle = MuelleLineal(material=material, diametro_hilo=2.5)
+# Create the spring with the correct class
+spring = CompressionSpring(material=material, wire_diameter=2.5)
 
-# Configurar propiedades del muelle (usando nombres correctos de métodos)
-muelle.diametro_medio = muelle.calcular_diametro_medio(diametro_exterior=30, diametro_interior=None)
-print(f"✅ Test básico de MuelleLineal")
-print(f"Material: {muelle.material.nombre_material}")
-print(f"Diámetro hilo: {muelle.diametro_hilo}")
-print(f"Diámetro medio: {muelle.diametro_medio}")
-print(f"Número espiras: {muelle.numero_espiras}")
-print(f"Longitud libre: {muelle.longitud_libre}")
+# Configure the spring's properties (using the correct method names).
+# set_diameter sets mean/outer/inner diameter from one of them.
+spring.set_diameter(outer_diameter=30)
+print(f"✅ Basic CompressionSpring test")
+print(f"Material: {spring.material.material_name}")
+print(f"Wire diameter: {spring.wire_diameter}")
+print(f"Mean diameter: {spring.mean_diameter}")
+print(f"Number of coils: {spring.nr_coils}")
+print(f"Free length: {spring.free_length}")
 
-# Ejemplo básico de cálculos
-if hasattr(muelle, 'calcular_indice_muelle'):
-    indice = muelle.calcular_indice_muelle()
-    print(f"Índice del muelle: {indice:.2f}")
+# Basic calculation example
+if hasattr(spring, 'calculate_spring_index'):
+    index = spring.calculate_spring_index()
+    print(f"Spring index: {index:.2f}")
 
-if hasattr(muelle, 'calcular_factor_de_wahl'):
-    factor_wahl = muelle.calcular_factor_de_wahl()
-    if factor_wahl is not None:
-        print(f"Factor de Wahl: {factor_wahl:.3f}")
+if hasattr(spring, 'calculate_wahl_factor'):
+    # calculate_wahl_factor returns (factor, category)
+    wahl_factor, _ = spring.calculate_wahl_factor()
+    if wahl_factor is not None:
+        print(f"Wahl factor: {wahl_factor:.3f}")
     else:
-        print(f"Factor de Wahl: No calculado (valor nulo)")
+        print(f"Wahl factor: Not calculated (null value)")
 
-muelle.calculate_spring_properties(numero_espiras=10, pitch=None, longitud_libre=100)
-posiciones = [30,40,50,60,70,80,90,100]
-for pos in posiciones:
-    muelle.add_posicion_carga(longitud=pos)
+spring.calculate_spring_properties(nr_coils=10, pitch=None, free_length=100)
+positions = [30,40,50,60,70,80,90,100]
+for pos in positions:
+    spring.add_load_position(length=pos)
 
-spring_data = muelle.get_spring_data()
+spring_data = spring.get_spring_data()
 for key, value in spring_data.items():
     print(f"{key}: {value}")
 
-data_positions = muelle.get_data_positions()
+data_positions = spring.get_data_positions()
 for pc in data_positions:
-    print(f"Posición: {pc.posicion}, Carga: {pc.carga}, Tensión: {pc.tension}, Diámetro Externo: {pc.diametro_externo}")
+    print(f"Position: {pc.position}, Load: {pc.load}, Stress: {pc.stress}, Outer Diameter: {pc.outer_diameter}")
 
-print("🎉 Test completado exitosamente!")
+print("🎉 Test completed successfully!")

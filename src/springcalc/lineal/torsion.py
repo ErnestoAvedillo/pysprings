@@ -1,4 +1,4 @@
-"""Cálculo de muelles de torsión."""
+"""Torsion spring calculations."""
 from math import pi
 import io
 import base64
@@ -8,12 +8,12 @@ import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
-from muelles.pymodels.material import Material
-from muelles.pymodels.wire_characteristics import WireCharacteristics
+from springcalc.pymodels.material import Material
+from springcalc.pymodels.wire_characteristics import WireCharacteristics
 from typing import Optional
-from muelles.pymodels.posiciones import PosicionesTableAngular
+from springcalc.pymodels.positions import AngularPositionsTable
 from pint import Quantity
-from muelles.pymodels.units import ureg
+from springcalc.pymodels.units import ureg
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
@@ -22,55 +22,55 @@ def _mag(v):
     return v.magnitude if isinstance(v, Quantity) else v
 
 
-class MuelleTorsion(WireCharacteristics):
+class TorsionSpring(WireCharacteristics):
     model_config = ConfigDict(arbitrary_types_allowed=True,
                               validate_assignment=True)
-    diametro_medio: Quantity = 0.0 * ureg.mm
-    diametro_interior: Quantity = 0.0 * ureg.mm
-    diametro_exterior: Quantity = 0.0 * ureg.mm
-    angulo_libre: Quantity = 0.0 * ureg.degree
-    angulo_tangencias: Quantity = 0.0 * ureg.degree
+    mean_diameter: Quantity = 0.0 * ureg.mm
+    inner_diameter: Quantity = 0.0 * ureg.mm
+    outer_diameter: Quantity = 0.0 * ureg.mm
+    free_angle: Quantity = 0.0 * ureg.degree
+    tangency_angle: Quantity = 0.0 * ureg.degree
     angle_travel: Quantity = 0.0 * ureg.degree
     angle_position: Quantity = 0.0 * ureg.degree
     torque_position: Quantity = 0.0 * ureg.N * ureg.mm
-    tension_position: Quantity = 0.0 * ureg.MPa
+    stress_position: Quantity = 0.0 * ureg.MPa
     pitch: Quantity = 0.0 * ureg.mm
     shot_peening: bool = False
-    # Número de ciclos para análisis de fatiga, por defecto 1 millón
-    numero_ciclos: int = 1e6  
-    numero_espiras_utiles: float = 0.0
-    numero_espiras: int = 0
-    ancho_muelle: Quantity = 0.0 * ureg.mm  # en mm
-    radious_leg_fija: Quantity = 0.0 * ureg.mm  # en mm
-    long_leg_fija: Quantity = 0.0 * ureg.mm  # en mm
-    radious_leg_movil: Quantity = 0.0 * ureg.mm  # en mm
-    long_leg_movil: Quantity = 0.0 * ureg.mm  # en mm
-    indice_muelle: float = 0.0  # factor_wahl: float = 0.0  # factor de Wahl
-    factor_wahl_category: Optional[str] = None  # categoría del factor de Wahl
-    factor_wahl_eval: Optional[float] = None  # factor de Wahl evaluado
-    factor_wahl: float = 0.0  # factor de Wahl
-    longitud_hilo_total: Quantity = 0.0 * ureg.mm  # en mm
-    longitud_hilo_cuerpo: Quantity = 0.0 * ureg.mm  # en mm
-    constante_muelle: Quantity = 0.0 * ureg.N * ureg.mm / ureg.rad  # en Nmm/rad
-    momento_resistente: Quantity = 0.0 * ureg.mm * ureg.mm * ureg.mm * ureg.mm  # en Nmm
-    # Lista de posiciones para análisis de fatiga
-    positions: PosicionesTableAngular = PosicionesTableAngular()
+    # Number of cycles for fatigue analysis, default 1 million
+    number_cycles: int = 1e6
+    nr_active_coils: float = 0.0
+    nr_coils: int = 0
+    spring_width: Quantity = 0.0 * ureg.mm  # in mm
+    fixed_leg_radius: Quantity = 0.0 * ureg.mm  # in mm
+    fixed_leg_length: Quantity = 0.0 * ureg.mm  # in mm
+    mobile_leg_radius: Quantity = 0.0 * ureg.mm  # in mm
+    mobile_leg_length: Quantity = 0.0 * ureg.mm  # in mm
+    spring_index: float = 0.0  # wahl_factor: float = 0.0  # Wahl factor
+    wahl_factor_category: Optional[str] = None  # Wahl factor category
+    wahl_factor_eval: Optional[float] = None  # evaluated Wahl factor
+    wahl_factor: float = 0.0  # Wahl factor
+    wire_length_total: Quantity = 0.0 * ureg.mm  # in mm
+    body_wire_length: Quantity = 0.0 * ureg.mm  # in mm
+    spring_constant: Quantity = 0.0 * ureg.N * ureg.mm / ureg.rad  # in Nmm/rad
+    resisting_moment: Quantity = 0.0 * ureg.mm * ureg.mm * ureg.mm * ureg.mm  # in Nmm
+    # List of positions for fatigue analysis
+    positions: AngularPositionsTable = AngularPositionsTable()
 
-    @field_validator('diametro_medio',
-                     'diametro_exterior',
-                     'diametro_interior',
+    @field_validator('mean_diameter',
+                     'outer_diameter',
+                     'inner_diameter',
                      'pitch',
-                     'ancho_muelle',
-                     'radious_leg_fija',
-                     'long_leg_fija',
-                     'radious_leg_movil',
-                     'long_leg_movil',
-                     'longitud_hilo_total',
-                     'longitud_hilo_cuerpo',
+                     'spring_width',
+                     'fixed_leg_radius',
+                     'fixed_leg_length',
+                     'mobile_leg_radius',
+                     'mobile_leg_length',
+                     'wire_length_total',
+                     'body_wire_length',
                      mode='before')
     @classmethod
     def validate_positive_quantities(cls, v):
-        """Valida que las cantidades sean positivas y tengan unidades correctas"""
+        """Validate that the quantities are positive and have the correct units"""
         if v is not None:
             try:
                 if isinstance(v, Quantity):
@@ -80,16 +80,16 @@ class MuelleTorsion(WireCharacteristics):
                 else:
                     quantity = ureg(v).to('mm')
                 if quantity.magnitude < 0:
-                    raise ValueError(f'{quantity} debe ser un valor positivo con unidades válidas.')
+                    raise ValueError(f'{quantity} must be a positive value with valid units.')
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar cantidad: {e}')
+                raise ValueError(f'Error validating quantity: {e}')
         return quantity
 
-    @field_validator('angulo_libre', 'angulo_tangencias', 'angle_position', 'angle_travel', mode='before')
+    @field_validator('free_angle', 'tangency_angle', 'angle_position', 'angle_travel', mode='before')
     @classmethod
     def validate_positive_angles(cls, v):
-        """Valida que los ángulos sean positivos y tengan unidades correctas"""
+        """Validate that the angles are positive and have the correct units"""
         if v is not None:
             try:
                 if isinstance(v, Quantity):
@@ -102,13 +102,13 @@ class MuelleTorsion(WireCharacteristics):
                     quantity =  360 * ureg.degree + quantity
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar ángulo: {e}')
+                raise ValueError(f'Error validating angle: {e}')
         return quantity
-    
-    @field_validator('constante_muelle',mode='before')
+
+    @field_validator('spring_constant',mode='before')
     @classmethod
     def validate_positive_spring_constant(cls, v):
-        """Valida que la constante del muelle sea positiva"""
+        """Validate that the spring constant is positive"""
         if v is not None:
             try:
                 if isinstance(v, Quantity):
@@ -118,16 +118,16 @@ class MuelleTorsion(WireCharacteristics):
                 else:
                     quantity = ureg(v).to('N*mm/rad')
                 if quantity.magnitude <= 0:
-                    raise ValueError(f'{v} debe ser un valor positivo')
+                    raise ValueError(f'{v} must be a positive value')
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar constante del muelle: {e}')
+                raise ValueError(f'Error validating spring constant: {e}')
         return quantity
 
-    @field_validator('momento_resistente', mode='before')
+    @field_validator('resisting_moment', mode='before')
     @classmethod
     def validate_positive_sptring_constant(cls,v):
-        """Valida el momento resistente"""
+        """Validate the resisting moment"""
         if v is not None:
             try:
                 if isinstance(v, Quantity):
@@ -137,16 +137,16 @@ class MuelleTorsion(WireCharacteristics):
                 else:
                     quantity = ureg(v).to('mm**4')
                 if quantity.magnitude <= 0:
-                    raise ValueError(f'{v} debe ser un valor positivo')
+                    raise ValueError(f'{v} must be a positive value')
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar momento resistente: {e}')
+                raise ValueError(f'Error validating resisting moment: {e}')
         return quantity
-    
+
     @field_validator('torque_position', mode='before')
     @classmethod
     def validate_torque_position(cls, v):
-        """Valida la posición de torque"""
+        """Validate the torque position"""
         if v is not None:
             try:
                 if isinstance(v, Quantity):
@@ -156,16 +156,16 @@ class MuelleTorsion(WireCharacteristics):
                 else:
                     quantity = ureg(v).to('N*mm')
                 if quantity.magnitude < 0:
-                    raise ValueError(f'{v} debe ser un valor positivo')
+                    raise ValueError(f'{v} must be a positive value')
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar posición de torque: {e}')
+                raise ValueError(f'Error validating torque position: {e}')
         return quantity
-    
-    @field_validator('tension_position', mode='before')
+
+    @field_validator('stress_position', mode='before')
     @classmethod
-    def validate_tension_position(cls, v):
-        """Valida la posición de tensión"""
+    def validate_stress_position(cls, v):
+        """Validate the stress position"""
         if v is not None:
             try:
                 if isinstance(v, Quantity):
@@ -175,337 +175,337 @@ class MuelleTorsion(WireCharacteristics):
                 else:
                     quantity = ureg(v).to('MPa')
                 if quantity.magnitude < 0:
-                    raise ValueError(f'{v} debe ser un valor positivo')
+                    raise ValueError(f'{v} must be a positive value')
                 return quantity
             except Exception as e:
-                raise ValueError(f'Error al validar posición de tensión: {e}')
+                raise ValueError(f'Error validating stress position: {e}')
         return quantity
 
     def __init__(self, material: Material, wire_diameter: float, **data):
         data.update({
             'material': material,
-            'diametro_hilo': wire_diameter,
+            'wire_diameter': wire_diameter,
         })
         super().__init__(**data)
-        self.numero_ciclos = 1e6  # Valor por defecto de 1 millón de ciclos
-        self.shot_peening = False  # Valor por defecto sin shot peening
-        self.numero_espiras_utiles = 0.0
-        self.numero_espiras = 0
-        self.indice_muelle = 0.0  # factor_wahl: float = 0.0  # factor de Wahl
-        self.factor_wahl_category = None  # categoría del factor de Wahl
-        self.factor_wahl_eval = None  # factor de Wahl evaluado
-        self.factor_wahl = 0.0  # factor de Wahl
-        # Lista de posiciones para análisis de fatiga
-        self.positions = PosicionesTableAngular()
-    
+        self.number_cycles = 1e6  # Default value of 1 million cycles
+        self.shot_peening = False  # Default value, no shot peening
+        self.nr_active_coils = 0.0
+        self.nr_coils = 0
+        self.spring_index = 0.0  # wahl_factor: float = 0.0  # Wahl factor
+        self.wahl_factor_category = None  # Wahl factor category
+        self.wahl_factor_eval = None  # evaluated Wahl factor
+        self.wahl_factor = 0.0  # Wahl factor
+        # List of positions for fatigue analysis
+        self.positions = AngularPositionsTable()
+
     def configure_spring(self,
-                         diametro_medio: float,
-                         numero_espiras: int,
+                         mean_diameter: float,
+                         nr_coils: int,
                          pitch: float,
-                         angulo_libre: float,
-                         radious_leg_fija: float,
-                         radious_leg_movil: float):
-        """Configura el muelle de torsión con los parámetros proporcionados"""
-        self.set_diametro_medio(diametro_medio)
-        self.set_numero_espiras(numero_espiras)
+                         free_angle: float,
+                         fixed_leg_radius: float,
+                         mobile_leg_radius: float):
+        """Configure the torsion spring with the given parameters"""
+        self.set_mean_diameter(mean_diameter)
+        self.set_nr_coils(nr_coils)
         self.set_pitch(pitch)
-        self.set_angulo_libre(angulo_libre)
-        self.set_radious_leg_fija(radious_leg_fija)
-        self.set_radious_leg_movil(radious_leg_movil)
+        self.set_free_angle(free_angle)
+        self.set_fixed_leg_radius(fixed_leg_radius)
+        self.set_mobile_leg_radius(mobile_leg_radius)
         return self.calculate_spring_properties()
 
     def calculate_spring_properties(self):
-        """Calcula todas las propiedades del muelle de torsión basándose en los parámetros proporcionados"""
-        self.set_angulo_tangencias(self.angulo_libre, self.radious_leg_fija, self.radious_leg_movil)
-        self.set_ancho_muelle(self.numero_espiras, self.pitch, self.angulo_libre)
-        self.set_longitud_hilo(self.numero_espiras, self.pitch, self.angulo_tangencias, self.radious_leg_fija, self.radious_leg_movil)
-        self.calcular_indice_muelle()
-        self.calcular_factor_de_wahl()
-        self.calculate_length_legs(self.radious_leg_fija, self.radious_leg_movil)
-        self.set_momento_resistente()
-        self.calcula_constante_muelle()
+        """Calculate all torsion spring properties based on the given parameters"""
+        self.set_tangency_angle(self.free_angle, self.fixed_leg_radius, self.mobile_leg_radius)
+        self.set_spring_width(self.nr_coils, self.pitch, self.free_angle)
+        self.set_wire_length(self.nr_coils, self.pitch, self.tangency_angle, self.fixed_leg_radius, self.mobile_leg_radius)
+        self.calculate_spring_index()
+        self.calculate_wahl_factor()
+        self.calculate_length_legs(self.fixed_leg_radius, self.mobile_leg_radius)
+        self.set_resisting_moment()
+        self.calculate_spring_constant()
         return self.get_spring_properties()
 
-    def set_material(self, material: str, diametro_hilo: float):
-        """Establece el material del muelle de torsión"""
-        super().set_material(material, diametro_hilo)
+    def set_material(self, material: str, wire_diameter: float):
+        """Set the torsion spring's material"""
+        super().set_material(material, wire_diameter)
         if not isinstance(material, Material):
-            raise ValueError("""El material debe ser una instancia de la clase
-                             Material""")
-        if diametro_hilo is None:
-            raise ValueError("""Debe proporcionar el diámetro del hilo para
-                            establecer el material""")
+            raise ValueError("""The material must be an instance of the
+                             Material class""")
+        if wire_diameter is None:
+            raise ValueError("""You must provide the wire diameter to
+                            set the material""")
 
-    def set_diametro_medio(self, diametro_medio):
-        """Establece el diámetro medio del muelle de torsión"""
-        if _mag(diametro_medio) <= 0:
-            raise ValueError("El diámetro medio debe ser un valor positivo")
-        self.diametro_medio = diametro_medio
-        self.diametro_interior = self.diametro_medio - self.diametro_hilo
-        self.diametro_exterior = self.diametro_medio + self.diametro_hilo
+    def set_mean_diameter(self, mean_diameter):
+        """Set the torsion spring's mean diameter"""
+        if _mag(mean_diameter) <= 0:
+            raise ValueError("The mean diameter must be a positive value")
+        self.mean_diameter = mean_diameter
+        self.inner_diameter = self.mean_diameter - self.wire_diameter
+        self.outer_diameter = self.mean_diameter + self.wire_diameter
         return
 
-    def set_numero_espiras(self, numero_espiras):
-        """Establece el número de espiras del muelle de torsión"""
-        if numero_espiras <= 0:
-            raise ValueError("El número de espiras debe ser un valor positivo")
-        self.numero_espiras = numero_espiras
-        return self.numero_espiras
-    
+    def set_nr_coils(self, nr_coils):
+        """Set the torsion spring's number of coils"""
+        if nr_coils <= 0:
+            raise ValueError("The number of coils must be a positive value")
+        self.nr_coils = nr_coils
+        return self.nr_coils
+
     def set_pitch(self, pitch):
-        """Establece el pitch del muelle de torsión"""
+        """Set the torsion spring's pitch"""
         self.pitch = pitch
-        if self.pitch <= self.diametro_hilo:
-            raise ValueError("El pitch debe ser un valor positivo")
+        if self.pitch <= self.wire_diameter:
+            raise ValueError("The pitch must be a positive value")
         return self.pitch
-    
-    def set_angulo_libre(self, angulo_libre):
-        """Establece el ángulo libre del muelle de torsión"""
-        if angulo_libre < 0:
-            angulo_libre = 360 + angulo_libre
-        self.angulo_libre = angulo_libre
-        return self.angulo_libre
 
-    def set_radious_leg_fija(self, radious_leg_fija):
-        """Establece el radio de la pata fija del muelle de torsión"""
-        self.radious_leg_fija = radious_leg_fija
-        if self.radious_leg_fija < self.diametro_medio / 2:
-            raise ValueError("El radio de la pata fija debe ser al menos la mitad del diámetro medio")
-        return self.radious_leg_fija
+    def set_free_angle(self, free_angle):
+        """Set the torsion spring's free angle"""
+        if free_angle < 0:
+            free_angle = 360 + free_angle
+        self.free_angle = free_angle
+        return self.free_angle
 
-    def set_radious_leg_movil(self, radious_leg_movil):
-        """Establece el radio de la pata móvil del muelle de torsión"""
-        self.radious_leg_movil = radious_leg_movil
-        if self.radious_leg_movil < self.diametro_medio / 2:
-            raise ValueError("El radio de la pata móvil debe ser al menos la mitad del diámetro medio")
-        return self.radious_leg_movil
+    def set_fixed_leg_radius(self, fixed_leg_radius):
+        """Set the torsion spring's fixed leg radius"""
+        self.fixed_leg_radius = fixed_leg_radius
+        if self.fixed_leg_radius < self.mean_diameter / 2:
+            raise ValueError("The fixed leg radius must be at least half the mean diameter")
+        return self.fixed_leg_radius
 
-    def calcular_indice_muelle(self):
-        """Calcula el índice del muelle de torsión"""
-        self.indice_muelle = self.diametro_medio / self.diametro_hilo
-        return self.indice_muelle
+    def set_mobile_leg_radius(self, mobile_leg_radius):
+        """Set the torsion spring's mobile leg radius"""
+        self.mobile_leg_radius = mobile_leg_radius
+        if self.mobile_leg_radius < self.mean_diameter / 2:
+            raise ValueError("The mobile leg radius must be at least half the mean diameter")
+        return self.mobile_leg_radius
 
-    def calcular_factor_de_wahl(self):
-        """Calcula el factor de Wahl para muelles de torsión"""
-        if self.indice_muelle is None:
-            self.calcular_indice_muelle()
+    def calculate_spring_index(self):
+        """Calculate the torsion spring index"""
+        self.spring_index = self.mean_diameter / self.wire_diameter
+        return self.spring_index
 
-        self.factor_wahl = ((4*self.indice_muelle**2 - self.indice_muelle - 1)
+    def calculate_wahl_factor(self):
+        """Calculate the Wahl factor for torsion springs"""
+        if self.spring_index is None:
+            self.calculate_spring_index()
+
+        self.wahl_factor = ((4*self.spring_index**2 - self.spring_index - 1)
                             /
-                            (4 * self.indice_muelle * (self.indice_muelle - 1))
+                            (4 * self.spring_index * (self.spring_index - 1))
                             )
-        if self.indice_muelle < 4:
-            self.factor_wahl_category = 'Bajo'
-            self.factor_wahl_eval = 1 + 0.5 / self.indice_muelle
-        elif 4 <= self.indice_muelle < 8:
-            self.factor_wahl_category = 'Medio'
-            self.factor_wahl_eval = 1 + 0.75 / self.indice_muelle
+        if self.spring_index < 4:
+            self.wahl_factor_category = 'Low'
+            self.wahl_factor_eval = 1 + 0.5 / self.spring_index
+        elif 4 <= self.spring_index < 8:
+            self.wahl_factor_category = 'Medium'
+            self.wahl_factor_eval = 1 + 0.75 / self.spring_index
         else:
-            self.factor_wahl_category = 'Alto'
-            self.factor_wahl_eval = 1 + 1.0 / self.indice_muelle
+            self.wahl_factor_category = 'High'
+            self.wahl_factor_eval = 1 + 1.0 / self.spring_index
 
-        return self.factor_wahl_eval
+        return self.wahl_factor_eval
 
-    def set_ancho_muelle(self, numero_espiras, pitch, angulo_libre):
-        """Establece el ancho del muelle de torsión"""
-        if numero_espiras is None or pitch is None or angulo_libre is None:
-            raise ValueError("""Debe proporcionar número de espiras útiles,
-                             pitch y ángulo libre para establecer el ancho del
-                             muelle""")
-        self.angulo_libre = angulo_libre
+    def set_spring_width(self, nr_coils, pitch, free_angle):
+        """Set the torsion spring's width"""
+        if nr_coils is None or pitch is None or free_angle is None:
+            raise ValueError("""You must provide the number of active
+                             coils, pitch and free angle to set the spring
+                             width""")
+        self.free_angle = free_angle
         self.pitch = pitch
-        self.ancho_muelle = (self.numero_espiras + self.angulo_libre / 2 / pi) * self.pitch
-        self.numero_espiras_utiles = (self.numero_espiras +
-                                      self.angulo_libre / 2 / pi)
+        self.spring_width = (self.nr_coils + self.free_angle / 2 / pi) * self.pitch
+        self.nr_active_coils = (self.nr_coils +
+                                      self.free_angle / 2 / pi)
 
-        return self.ancho_muelle
+        return self.spring_width
 
-    def set_longitud_hilo(self,
-                          numero_espiras: int,
+    def set_wire_length(self,
+                          nr_coils: int,
                           pitch: float,
-                          angulo_tangencias: float,
-                          radious_leg_fija: float,
-                          radious_leg_movil: float):
-        """Calcula la longitud del hilo del muelle de torsión"""
-        parameters_provided = [numero_espiras,
+                          tangency_angle: float,
+                          fixed_leg_radius: float,
+                          mobile_leg_radius: float):
+        """Calculate the torsion spring's wire length"""
+        parameters_provided = [nr_coils,
                                pitch,
-                               angulo_tangencias,
-                               radious_leg_fija,
-                               radious_leg_movil]
+                               tangency_angle,
+                               fixed_leg_radius,
+                               mobile_leg_radius]
         if sum(1 for var in parameters_provided if var is None) > 0:
-            raise ValueError("""Debe proporcionar número de espiras útiles,
-                             pitch, ángulo libre, y radios de las patas para
-                             calcular la longitud del hilo""")
-        if _mag(self.diametro_medio) <= 0:
-            raise ValueError("""El diámetro medio debe ser un valor positivo
-                             para calcular la longitud del hilo""")
-        self.numero_espiras = numero_espiras
+            raise ValueError("""You must provide the number of active
+                             coils, pitch, free angle, and leg radii to
+                             calculate the wire length""")
+        if _mag(self.mean_diameter) <= 0:
+            raise ValueError("""The mean diameter must be a positive value
+                             to calculate the wire length""")
+        self.nr_coils = nr_coils
         self.pitch = pitch
-        self.angulo_tangencias = angulo_tangencias
-        self.radious_leg_fija = radious_leg_fija
-        self.radious_leg_movil = radious_leg_movil
-        longitud_una_vuelta = np.sqrt((pi * self.diametro_medio) ** 2 +
-                                   (self.pitch / (2 * pi)) ** 2) 
-        self.longitud_hilo_cuerpo = ((self.numero_espiras + self.angulo_tangencias / 2 / pi) *
-                                     longitud_una_vuelta)
-        self.calculate_length_legs(self.radious_leg_fija, self.radious_leg_movil)
-        self.longitud_hilo_total = (self.longitud_hilo_cuerpo +
-                                    self.long_leg_fija + self.long_leg_movil)
-        return self.longitud_hilo_total
+        self.tangency_angle = tangency_angle
+        self.fixed_leg_radius = fixed_leg_radius
+        self.mobile_leg_radius = mobile_leg_radius
+        single_turn_length = np.sqrt((pi * self.mean_diameter) ** 2 +
+                                   (self.pitch / (2 * pi)) ** 2)
+        self.body_wire_length = ((self.nr_coils + self.tangency_angle / 2 / pi) *
+                                     single_turn_length)
+        self.calculate_length_legs(self.fixed_leg_radius, self.mobile_leg_radius)
+        self.wire_length_total = (self.body_wire_length +
+                                    self.fixed_leg_length + self.mobile_leg_length)
+        return self.wire_length_total
 
-    def set_angulo_tangencias(self,
-                              angulo_libre,
-                              radious_leg_fija,
-                              radious_leg_movil):
-        """Calcula el ángulo de tangencias del muelle de torsión"""
-        parameters_provided = [angulo_libre,
-                               radious_leg_fija,
-                               radious_leg_movil]
+    def set_tangency_angle(self,
+                              free_angle,
+                              fixed_leg_radius,
+                              mobile_leg_radius):
+        """Calculate the torsion spring's tangency angle"""
+        parameters_provided = [free_angle,
+                               fixed_leg_radius,
+                               mobile_leg_radius]
         if sum(1 for var in parameters_provided if var is None) > 0:
-            raise ValueError("""Debe proporcionar ángulo libre y radios de las
-                             patas para calcular el ángulo de tangencias""")
-        self.angulo_libre = angulo_libre
-        self.radious_leg_fija = radious_leg_fija
-        self.radious_leg_movil = radious_leg_movil
-        angulo_cero_equivalente = (2 * pi -
-                                   atan(self.radious_leg_fija / self.diametro_medio) -
-                                   atan(self.radious_leg_movil / self.diametro_medio))
-        if self.angulo_libre + angulo_cero_equivalente > 2 * pi:
-            self.angulo_tangencias = angulo_cero_equivalente + self.angulo_libre - 2 * pi
+            raise ValueError("""You must provide the free angle and leg
+                             radii to calculate the tangency angle""")
+        self.free_angle = free_angle
+        self.fixed_leg_radius = fixed_leg_radius
+        self.mobile_leg_radius = mobile_leg_radius
+        zero_equivalent_angle = (2 * pi -
+                                   atan(self.fixed_leg_radius / self.mean_diameter) -
+                                   atan(self.mobile_leg_radius / self.mean_diameter))
+        if self.free_angle + zero_equivalent_angle > 2 * pi:
+            self.tangency_angle = zero_equivalent_angle + self.free_angle - 2 * pi
         else:
-            self.angulo_tangencias = 2 * pi - angulo_cero_equivalente - self.angulo_libre
-        self.numero_espiras_utiles = self.numero_espiras + self.angulo_tangencias / 2 / pi
-        return self.angulo_tangencias
+            self.tangency_angle = 2 * pi - zero_equivalent_angle - self.free_angle
+        self.nr_active_coils = self.nr_coils + self.tangency_angle / 2 / pi
+        return self.tangency_angle
 
     def calculate_length_legs(self,
-                              radious_leg_fija=None,
-                              radious_leg_movil=None):
-        """Calcula la longitud de las patas del muelle de torsión"""
-        self.radious_leg_fija = radious_leg_fija
-        self.radious_leg_movil = radious_leg_movil
-        if self.radious_leg_fija is None or self.radious_leg_fija < self.diametro_medio / 2:
-            self.radious_leg_fija = self.diametro_medio / 2
-        if self.radious_leg_movil is None or self.radious_leg_movil < self.diametro_medio / 2:
-            self.radious_leg_movil = self.diametro_medio / 2
-        self.long_leg_fija = np.sqrt(self.diametro_medio**2 / 4 + self.radious_leg_fija**2)
-        self.long_leg_movil = np.sqrt(self.diametro_medio**2 / 4 + self.radious_leg_movil**2)
-        return self.long_leg_fija, self.long_leg_movil
+                              fixed_leg_radius=None,
+                              mobile_leg_radius=None):
+        """Calculate the torsion spring's leg lengths"""
+        self.fixed_leg_radius = fixed_leg_radius
+        self.mobile_leg_radius = mobile_leg_radius
+        if self.fixed_leg_radius is None or self.fixed_leg_radius < self.mean_diameter / 2:
+            self.fixed_leg_radius = self.mean_diameter / 2
+        if self.mobile_leg_radius is None or self.mobile_leg_radius < self.mean_diameter / 2:
+            self.mobile_leg_radius = self.mean_diameter / 2
+        self.fixed_leg_length = np.sqrt(self.mean_diameter**2 / 4 + self.fixed_leg_radius**2)
+        self.mobile_leg_length = np.sqrt(self.mean_diameter**2 / 4 + self.mobile_leg_radius**2)
+        return self.fixed_leg_length, self.mobile_leg_length
 
-    def set_numero_ciclos(self, numero_ciclos):
-        """Establece el número de ciclos para el análisis de fatiga del muelle de torsión"""
-        self.numero_ciclos = numero_ciclos
-        return self.numero_ciclos
+    def set_number_cycles(self, number_cycles):
+        """Set the number of cycles for the torsion spring's fatigue analysis"""
+        self.number_cycles = number_cycles
+        return self.number_cycles
 
     def set_shot_peening(self, shot_peening: bool):
-        """Establece si el muelle de torsión ha sido tratado con shot peening"""
+        """Set whether the torsion spring has been treated with shot peening"""
         self.shot_peening = shot_peening
         return self.shot_peening
 
-    def calcula_constante_muelle(self):
-        """Calcula la constante del muelle de torsión"""
-        if _mag(self.momento_resistente) <= 0:
-            self.set_momento_resistente()
-        self.constante_muelle = (self.material.young_modulus *
-                                 self.momento_resistente /
-                                 self.longitud_hilo_total)
-        return self.constante_muelle
+    def calculate_spring_constant(self):
+        """Calculate the torsion spring constant"""
+        if _mag(self.resisting_moment) <= 0:
+            self.set_resisting_moment()
+        self.spring_constant = (self.material.young_modulus *
+                                 self.resisting_moment /
+                                 self.wire_length_total)
+        return self.spring_constant
 
-    def calcular_torque(self, angulo_giro):
-        """Calcula el torque aplicado al muelle de torsión para un ángulo de
-        giro dado en grados"""
-        if _mag(angulo_giro) <= 0:
-            raise ValueError("El ángulo de giro debe ser un valor positivo")
-        self.angulo_giro = angulo_giro
-        self.torque_position = self.constante_muelle * self.angulo_giro
+    def calculate_torque(self, rotation_angle):
+        """Calculate the torque applied to the torsion spring for a given
+        rotation angle in degrees"""
+        if _mag(rotation_angle) <= 0:
+            raise ValueError("The rotation angle must be a positive value")
+        self.rotation_angle = rotation_angle
+        self.torque_position = self.spring_constant * self.rotation_angle
         return self.torque_position
 
-    def set_momento_resistente(self):
-        """Calcula el momento resistente del muelle de torsión para un torque
-        máximo dado"""
-        self.momento_resistente = pi * np.pow(self.diametro_hilo, 4) / 64
-        return self.momento_resistente
+    def set_resisting_moment(self):
+        """Calculate the torsion spring's resisting moment for a given
+        maximum torque"""
+        self.resisting_moment = pi * np.pow(self.wire_diameter, 4) / 64
+        return self.resisting_moment
 
-    def calcular_tension(self, torque):
-        """Calcula la tensión máxima en el muelle de torsión para un torque
-        dado"""
+    def calculate_stress(self, torque):
+        """Calculate the maximum stress in the torsion spring for a given
+        torque"""
         if _mag(torque) <= 0:
-            raise ValueError("El torque debe ser un valor positivo para \
-            calcular la tensión")
-        tension = ((32 * torque * self.factor_wahl) /
-                   (pi * np.pow(self.diametro_medio, 3)))
-        return tension
+            raise ValueError("The torque must be a positive value to \
+            calculate the stress")
+        stress = ((32 * torque * self.wahl_factor) /
+                   (pi * np.pow(self.mean_diameter, 3)))
+        return stress
 
     def add_position(self, angle_travel=None, torque=None):
-        """Agrega una posición usando un ángulo recorrido o torque para análisis de fatiga"""
+        """Add a position using a travel angle or torque for fatigue analysis"""
         if angle_travel is None and torque is None:
-            raise ValueError("Debe proporcionar un ángulo o un torque solo")
+            raise ValueError("You must provide either an angle or a torque")
         if angle_travel is not None and torque is not None:
-            raise ValueError("Debe proporcionar solo un ángulo o un torque")
+            raise ValueError("You must provide only an angle or a torque")
         if angle_travel is not None and angle_travel <= 0:
-            raise ValueError("El ángulo debe ser un valor positivo")
+            raise ValueError("The angle must be a positive value")
         if torque is not None and torque <= 0:
-            raise ValueError("El torque debe ser un valor positivo")
-        if self.constante_muelle <= 0:
-            self.calcula_constante_muelle()
+            raise ValueError("The torque must be a positive value")
+        if self.spring_constant <= 0:
+            self.calculate_spring_constant()
         if angle_travel is not None:
             self.angle_travel = angle_travel
-            self.torque_position = self.constante_muelle * self.angle_travel
-            self.tension_position = self.calcular_tension(self.torque_position)
+            self.torque_position = self.spring_constant * self.angle_travel
+            self.stress_position = self.calculate_stress(self.torque_position)
         else:
             self.torque_position = torque
-            self.angle_travel = self.torque_position / self.constante_muelle
-            self.tension_position = self.calcular_tension(self.angle_travel)
-        self.angle_position = self.angulo_libre - self.angle_travel
-        nuevo_angulo_tangencias = self.angulo_tangencias + self.angle_travel
-        nuevo_diametro_medio = (4 * (self.longitud_hilo_cuerpo ** 2 - self.pitch ** 2) / 
-                                (2 * pi * self.numero_espiras + nuevo_angulo_tangencias) ** 2) ** 0.5
-        diametro_exterior = nuevo_diametro_medio + self.diametro_hilo
-        diametro_interior = nuevo_diametro_medio - self.diametro_hilo
+            self.angle_travel = self.torque_position / self.spring_constant
+            self.stress_position = self.calculate_stress(self.angle_travel)
+        self.angle_position = self.free_angle - self.angle_travel
+        new_tangency_angle = self.tangency_angle + self.angle_travel
+        new_mean_diameter = (4 * (self.body_wire_length ** 2 - self.pitch ** 2) /
+                                (2 * pi * self.nr_coils + new_tangency_angle) ** 2) ** 0.5
+        outer_diameter = new_mean_diameter + self.wire_diameter
+        inner_diameter = new_mean_diameter - self.wire_diameter
         if not hasattr(self, 'positions'):
-            self.positions = PosicionesTableAngular()
-        self.positions.add_posicion_carga(self.angle_position,
+            self.positions = AngularPositionsTable()
+        self.positions.add_load_position(self.angle_position,
                                           self.angle_travel,
                                           self.torque_position,
-                                          self.tension_position, diametro_exterior, diametro_interior)
+                                          self.stress_position, outer_diameter, inner_diameter)
         return self.positions
 
     def clean_positions(self):
-        """Limpia la lista de posiciones para análisis de fatiga"""
+        """Clear the positions list for fatigue analysis"""
         self.positions.clear_table()
-        
-        return self.positions.posiciones
+
+        return self.positions.positions
 
     def get_positions(self):
-        """Obtiene la lista de posiciones para análisis de fatiga"""
-        return self.positions.posiciones
+        """Get the positions list for fatigue analysis"""
+        return self.positions.positions
 
     def get_data_positions(self):
-        """Retorna la tabla de posiciones angulares para curvas por posición."""
-        return self.positions.posiciones
+        """Return the angular positions table for position curves."""
+        return self.positions.positions
 
     def get_data_travels(self):
-        """Retorna la tabla de posiciones angulares para curvas por recorrido."""
-        return self.positions.posiciones
+        """Return the angular positions table for travel curves."""
+        return self.positions.positions
 
     def get_forces_vs_position_graph(self, show=False):
-        """Genera la curva de torque vs posición angular."""
+        """Generate the torque vs angular position curve."""
         def _to_deg_float(value):
             return float(value.to('degree').magnitude) if isinstance(value, Quantity) else float(value)
 
         def _to_torque_float(value):
             return float(value.to('N*mm').magnitude) if isinstance(value, Quantity) else float(value)
 
-        tabla_posiciones = self.positions.posiciones
-        if not tabla_posiciones:
-            raise ValueError('No hay posiciones para graficar')
+        positions_table = self.positions.positions
+        if not positions_table:
+            raise ValueError('No positions to plot')
 
-        posiciones = [_to_deg_float(pc.posicion) for pc in tabla_posiciones]
-        torques = [_to_torque_float(pc.carga) for pc in tabla_posiciones]
+        positions = [_to_deg_float(pc.position) for pc in positions_table]
+        torques = [_to_torque_float(pc.load) for pc in positions_table]
 
         plot = plt.figure()
-        plt.plot(posiciones, torques, marker='o')
-        plt.title('Curva de Torque vs Posicion Angular')
-        plt.xlabel('Posicion (grados)')
+        plt.plot(positions, torques, marker='o')
+        plt.title('Torque vs Angular Position Curve')
+        plt.xlabel('Position (degrees)')
         plt.ylabel('Torque (N*mm)')
         plt.grid(True)
         if show:
@@ -520,24 +520,24 @@ class MuelleTorsion(WireCharacteristics):
         return plot_data
 
     def get_forces_vs_travel_graph(self, show=False):
-        """Genera la curva de torque vs recorrido angular."""
+        """Generate the torque vs angular travel curve."""
         def _to_deg_float(value):
             return float(value.to('degree').magnitude) if isinstance(value, Quantity) else float(value)
 
         def _to_torque_float(value):
             return float(value.to('N*mm').magnitude) if isinstance(value, Quantity) else float(value)
 
-        tabla_posiciones = self.positions.posiciones
-        if not tabla_posiciones:
-            raise ValueError('No hay posiciones para graficar')
+        positions_table = self.positions.positions
+        if not positions_table:
+            raise ValueError('No positions to plot')
 
-        recorridos = [_to_deg_float(pc.recorrido) for pc in tabla_posiciones]
-        torques = [_to_torque_float(pc.carga) for pc in tabla_posiciones]
+        travels = [_to_deg_float(pc.travel) for pc in positions_table]
+        torques = [_to_torque_float(pc.load) for pc in positions_table]
 
         plot = plt.figure()
-        plt.plot(recorridos, torques, marker='o')
-        plt.title('Curva de Torque vs Recorrido Angular')
-        plt.xlabel('Recorrido (grados)')
+        plt.plot(travels, torques, marker='o')
+        plt.title('Torque vs Angular Travel Curve')
+        plt.xlabel('Travel (degrees)')
         plt.ylabel('Torque (N*mm)')
         plt.grid(True)
         if show:
@@ -552,24 +552,24 @@ class MuelleTorsion(WireCharacteristics):
         return plot_data
 
     def get_diameter_vs_position_graph(self, show=False):
-        """Grafica diametro externo vs posicion angular y seccion del muelle."""
+        """Plot outer diameter vs angular position and the spring cross-section."""
         def _to_deg_float(value):
             return float(value.to('degree').magnitude) if isinstance(value, Quantity) else float(value)
 
         def _to_mm_float(value):
             return float(value.to('mm').magnitude) if isinstance(value, Quantity) else float(value)
 
-        tabla_posiciones = self.positions.posiciones
-        if not tabla_posiciones:
-            raise ValueError('No hay posiciones para graficar')
+        positions_table = self.positions.positions
+        if not positions_table:
+            raise ValueError('No positions to plot')
 
-        posiciones = [_to_deg_float(pc.posicion) for pc in tabla_posiciones]
-        diametros = [_to_mm_float(pc.diametro_externo) for pc in tabla_posiciones]
+        positions = [_to_deg_float(pc.position) for pc in positions_table]
+        diameters = [_to_mm_float(pc.outer_diameter) for pc in positions_table]
 
-        diametro_exterior = self.diametro_medio + self.diametro_hilo
-        diametro_interior = max(self.diametro_medio - self.diametro_hilo, 0 * ureg.mm)
-        diametro_exterior_mm = _to_mm_float(diametro_exterior)
-        diametro_interior_mm = _to_mm_float(diametro_interior)
+        outer_diameter = self.mean_diameter + self.wire_diameter
+        inner_diameter = max(self.mean_diameter - self.wire_diameter, 0 * ureg.mm)
+        outer_diameter_mm = _to_mm_float(outer_diameter)
+        inner_diameter_mm = _to_mm_float(inner_diameter)
 
         fig, (ax1, ax2) = plt.subplots(
             1,
@@ -578,33 +578,33 @@ class MuelleTorsion(WireCharacteristics):
             gridspec_kw={'width_ratios': [2, 1]}
         )
 
-        ax1.plot(posiciones, diametros, marker='o', color='orange')
-        ax1.set_title('Diametro Externo vs Posicion Angular')
-        ax1.set_xlabel('Posicion (grados)')
-        ax1.set_ylabel('Diametro Externo (mm)')
+        ax1.plot(positions, diameters, marker='o', color='orange')
+        ax1.set_title('Outer Diameter vs Angular Position')
+        ax1.set_xlabel('Position (degrees)')
+        ax1.set_ylabel('Outer Diameter (mm)')
         ax1.grid(True)
 
         ax2.set_aspect('equal')
         ax2.axis('off')
 
-        radio_exterior = diametro_exterior_mm / 2.0
-        radio_interior = diametro_interior_mm / 2.0
-        max_radio = max(radio_exterior, radio_interior, 1.0)
-        padding = max_radio * 0.25
+        outer_radius = outer_diameter_mm / 2.0
+        inner_radius = inner_diameter_mm / 2.0
+        max_radius = max(outer_radius, inner_radius, 1.0)
+        padding = max_radius * 0.25
 
-        ax2.add_patch(Circle((0, 0), radio_exterior, fill=False, lw=2, color='tab:green'))
-        if radio_interior > 0:
-            ax2.add_patch(Circle((0, 0), radio_interior, fill=False, lw=2, color='tab:blue'))
+        ax2.add_patch(Circle((0, 0), outer_radius, fill=False, lw=2, color='tab:green'))
+        if inner_radius > 0:
+            ax2.add_patch(Circle((0, 0), inner_radius, fill=False, lw=2, color='tab:blue'))
 
-        ax2.plot([-radio_exterior, radio_exterior], [0, 0], color='tab:green', lw=1)
-        ax2.text(0, -padding, f"Dext = {diametro_exterior_mm:.2f} mm", ha='center', va='top', fontsize=8)
+        ax2.plot([-outer_radius, outer_radius], [0, 0], color='tab:green', lw=1)
+        ax2.text(0, -padding, f"Dext = {outer_diameter_mm:.2f} mm", ha='center', va='top', fontsize=8)
 
-        if radio_interior > 0:
-            ax2.plot([0, 0], [-radio_interior, radio_interior], color='tab:blue', lw=1)
-            ax2.text(0, padding, f"Dint = {diametro_interior_mm:.2f} mm", ha='center', va='bottom', fontsize=8)
+        if inner_radius > 0:
+            ax2.plot([0, 0], [-inner_radius, inner_radius], color='tab:blue', lw=1)
+            ax2.text(0, padding, f"Dint = {inner_diameter_mm:.2f} mm", ha='center', va='bottom', fontsize=8)
 
-        ax2.set_xlim(-max_radio - padding, max_radio + padding)
-        ax2.set_ylim(-max_radio - padding, max_radio + padding)
+        ax2.set_xlim(-max_radius - padding, max_radius + padding)
+        ax2.set_ylim(-max_radius - padding, max_radius + padding)
         if show:
             plt.show()
 
@@ -615,34 +615,34 @@ class MuelleTorsion(WireCharacteristics):
         buf.close()
         plt.close(fig)
         return plot_data
-    
+
     def get_spring_properties(self)-> dict:
-        """Obtiene un diccionario con todas las propiedades del muelle de torsión"""
+        """Get a dictionary with all the torsion spring properties"""
         return {
-            'material': self.material.nombre_material,
-            'modulo_young': self.material.young_modulus,
-            'diametro_hilo': self.diametro_hilo,
-            'diametro_medio': self.diametro_medio,
-            'diametro_interior': self.diametro_interior,
-            'diametro_exterior': self.diametro_exterior,
-            'angulo_libre': self.angulo_libre,  # Convertir a grados para la salida
-            'angulo_tangencias': self.angulo_tangencias,  # Convertir a grados para la salida
+            'material': self.material.material_name,
+            'young_modulus': self.material.young_modulus,
+            'wire_diameter': self.wire_diameter,
+            'mean_diameter': self.mean_diameter,
+            'inner_diameter': self.inner_diameter,
+            'outer_diameter': self.outer_diameter,
+            'free_angle': self.free_angle,  # Convert to degrees for output
+            'tangency_angle': self.tangency_angle,  # Convert to degrees for output
             'pitch': self.pitch,
             'shot_peening': self.shot_peening,
-            'numero_ciclos': self.numero_ciclos,
-            'numero_espiras_utiles': self.numero_espiras_utiles,
-            'numero_espiras': self.numero_espiras,
-            'ancho_muelle': self.ancho_muelle,
-            'radious_leg_fija': self.radious_leg_fija,
-            'long_leg_fija': self.long_leg_fija,
-            'radious_leg_movil': self.radious_leg_movil,
-            'long_leg_movil': self.long_leg_movil,
-            'indice_muelle': self.indice_muelle,
-            'factor_wahl': self.factor_wahl,
-            'factor_wahl_category': self.factor_wahl_category,
-            'factor_wahl_eval': self.factor_wahl_eval,
-            'longitud_hilo_total': self.longitud_hilo_total,
-            'longitud_hilo_cuerpo': self.longitud_hilo_cuerpo,
-            'constante_muelle': self.constante_muelle,
-            'momento_resistente': self.momento_resistente
+            'number_cycles': self.number_cycles,
+            'nr_active_coils': self.nr_active_coils,
+            'nr_coils': self.nr_coils,
+            'spring_width': self.spring_width,
+            'fixed_leg_radius': self.fixed_leg_radius,
+            'fixed_leg_length': self.fixed_leg_length,
+            'mobile_leg_radius': self.mobile_leg_radius,
+            'mobile_leg_length': self.mobile_leg_length,
+            'spring_index': self.spring_index,
+            'wahl_factor': self.wahl_factor,
+            'wahl_factor_category': self.wahl_factor_category,
+            'wahl_factor_eval': self.wahl_factor_eval,
+            'wire_length_total': self.wire_length_total,
+            'body_wire_length': self.body_wire_length,
+            'spring_constant': self.spring_constant,
+            'resisting_moment': self.resisting_moment
         }
