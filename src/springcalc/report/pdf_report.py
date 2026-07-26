@@ -182,8 +182,13 @@ class SpringPDFReport:
         result = self.spring.create_goodman_diagram(show=False)
         if not result or "error" in result:
             reason = result.get("error") if result else "no load positions available"
-            elements.append(Paragraph(
-                f"Goodman diagram could not be generated: {reason}", self.styles["Normal"]))
+            message = (
+                "Goodman diagram could not be generated. "
+                "Add at least one load position to the spring before generating the report."
+            )
+            if reason:
+                message += f" Details: {reason}"
+            elements.append(Paragraph(message, self.styles["Normal"]))
             return elements
 
         elements.append(self._b64_to_image(result["image"], width=140 * mm))

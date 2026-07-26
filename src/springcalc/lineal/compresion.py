@@ -358,6 +358,9 @@ class CompressionSpring(LinealSpring):
         base64 image, analysis, and calculated stresses. If it fails, return a
         dictionary with the 'error' and 'traceback' keys."""
         try:
+            if not self.positions.positions:
+                raise ValueError("No load positions available for Goodman analysis")
+
             # Get stresses from the positions table.
             stress_max = self.get_stress_max()
             stress_min = self.get_stress_min()
@@ -418,16 +421,24 @@ class CompressionSpring(LinealSpring):
 
     def get_stress_max(self):
         """Return the maximum spring stress."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
         return max(self.positions.positions, key=lambda x: x.stress).stress
 
     def get_stress_min(self):
         """Return the minimum spring stress."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
         return min(self.positions.positions, key=lambda x: x.stress).stress
 
     def get_load_max(self):
         """Return the maximum spring load."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
         return max(self.positions.positions, key=lambda x: x.load).load
 
     def get_load_min(self):
         """Return the minimum spring load."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
         return min(self.positions.positions, key=lambda x: x.load).load

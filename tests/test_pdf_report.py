@@ -43,6 +43,20 @@ def test_pdf_report_without_positions(tmp_path: Path):
 
     assert os.path.exists(output_path)
 
+
+def test_goodman_diagram_without_positions():
+    """Goodman generation should report a clear, intentional error for empty position data."""
+    material = Material(material_name="SL")
+    spring = CompressionSpring(material=material, wire_diameter=2.5)
+    spring.set_diameter(outer_diameter=30)
+    spring.calculate_spring_properties(nr_coils=None, pitch=20, free_length=100)
+
+    result = spring.create_goodman_diagram(show=False)
+
+    assert "error" in result
+    assert "no load positions" in result["error"].lower()
+
+
 if __name__ == "__main__":
     test_pdf_report_generates_file(tmp_path=Path("."))
     test_pdf_report_without_positions(tmp_path=Path("."))
