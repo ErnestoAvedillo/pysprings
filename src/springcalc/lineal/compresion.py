@@ -129,7 +129,7 @@ class CompressionSpring(LinealSpring):
             if length < self.solid_length.magnitude:
                 raise ValueError("The position cannot be smaller than the spring's solid length")
             load = self.calculate_load_at_position(length)
-            stress = self.calculate_stress_at_position()
+            stress = self.calculate_stress_at_position(load)
             outer_diameter = self.calculate_outer_diameter_at_position(length)
         except ValueError as e:
             raise ValueError(f"Error adding load position at length {length}: {e}")

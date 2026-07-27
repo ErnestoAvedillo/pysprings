@@ -216,9 +216,9 @@ class ExtensionSpring(LinealSpring):
 
         self.wahl_factor = (4 * self.spring_index - 1) / (4 * self.spring_index - 4) + 0.615 / self.spring_index
 
-        if self.wahl_factor < WAHL_FACTOR_CONSTANTS["red"][1]:
+        if self.spring_index < WAHL_FACTOR_CONSTANTS["red"][1]:
             self.wahl_factor_category = "red"
-        elif WAHL_FACTOR_CONSTANTS["orange"][0] <= self.wahl_factor < WAHL_FACTOR_CONSTANTS["orange"][1]:
+        elif WAHL_FACTOR_CONSTANTS["orange"][0] <= self.spring_index < WAHL_FACTOR_CONSTANTS["orange"][1]:
             self.wahl_factor_category = "orange"
         else:
             self.wahl_factor_category = "green"
@@ -248,9 +248,9 @@ class ExtensionSpring(LinealSpring):
     #     load = self.initial_stress + self.spring_constant * extension
     #     return load
 
-    def calculate_stress_at_position(self, length: float):
+    def calculate_stress_at_position(self, load: float):
         try:
-            load = self.calculate_load_at_position(length, TENSION)
+            # load = self.calculate_load_at_position(length, TENSION)
             stress = (8 * self.mean_diameter * load) / (3.1416 * self.wire_diameter**3) * self.wahl_factor
             return stress
         except ValueError as e:
@@ -270,7 +270,7 @@ class ExtensionSpring(LinealSpring):
         try:
             self.position_length = length
             load = self.calculate_load_at_position(length, TENSION)
-            stress = self.calculate_stress_at_position(self.position_length)
+            stress = self.calculate_stress_at_position(load)
             outer_diameter = self.calculate_outer_diameter_at_position(self.position_length)
         except ValueError as e:
             raise ValueError(f"Error adding load position at length {length}: {e}")

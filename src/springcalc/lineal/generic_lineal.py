@@ -21,10 +21,12 @@ class VariableLinealSpring(WireCharacteristics):
 
     # --- Base parameters of the generic spring ---
     free_length: Quantity = 0.0 * ureg.mm
+    nr_coils: float = 0.0
     nr_active_coils: float = 0.0
     shot_peening: bool = False
     coating: Optional[str] = None
     spring_index: float = 0.0  # Note: for variable geometries this index varies locally.
+    spring_constant: Quantity = 0.0 * ureg.N / ureg.mm
 
     # --- NEW: functional attributes for variable geometry ---
     # Store functions that receive the height 'h' (Quantity) and return a Quantity
@@ -50,7 +52,8 @@ class VariableLinealSpring(WireCharacteristics):
         return v
 
     def __init__(self, material, wire_diameter: float, **data):
-        super().__init__(material, wire_diameter, **data)
+        data.update({'material': material, 'wire_diameter': wire_diameter})
+        super().__init__(**data)
 
         # By default, if no custom functions are given, initialize as a constant linear spring
         if 'f_mean_diameter' not in data:
@@ -106,8 +109,10 @@ class VariableLinealSpring(WireCharacteristics):
                 continue
 
             def equation(z_test):
+                # fsolve passes z_test as a 1-element array; quad's bounds need a plain scalar.
+                z_val = float(np.atleast_1d(z_test)[0])
                 # Integral from 0 to z_test of (2*pi / p(h)) dh
-                val, _ = quad(lambda h: (2 * np.pi) / self.f_pitch(h * ureg.mm).to('mm').magnitude, 0, z_test)
+                val, _ = quad(lambda h: (2 * np.pi) / self.f_pitch(h * ureg.mm).to('mm').magnitude, 0, z_val)
                 return val - theta
 
             # Find the root (initial guess = previous point)
@@ -138,7 +143,7 @@ class VariableLinealSpring(WireCharacteristics):
         ds = np.sqrt(dx_dtheta**2 + dy_dtheta**2 + dz_dtheta**2)
 
         # Total integrated length
-        L_mm = np.trapz(ds, thetas)
+        L_mm = np.trapezoid(ds, thetas)
         self.wire_length = L_mm * ureg.mm
         return self.wire_length
 
@@ -160,7 +165,7 @@ class VariableLinealSpring(WireCharacteristics):
         local_flexibility = (8 * Ds**3) / (G_val * (d_val**4) * 2 * np.pi)
 
         # Numerical integration using the trapezoidal rule
-        total_flexibility = np.trapz(local_flexibility, thetas)
+        total_flexibility = np.trapezoid(local_flexibility, thetas)
 
         K_val = 1.0 / total_flexibility  # N/mm
         self.spring_constant = K_val * (ureg.N / ureg.mm)
@@ -233,7 +238,7 @@ class VariableLinealSpring(WireCharacteristics):
             local_flexibility = (8 * Ds**3) / (G_val * (d_val**4) * 2 * np.pi)
             active_local_flexibility = local_flexibility * is_active
 
-            total_flex = np.trapz(active_local_flexibility, thetas)
+            total_flex = np.trapezoid(active_local_flexibility, thetas)
 
             if total_flex <= 1e-9:
                 # The spring has reached full lock-up (solid height)

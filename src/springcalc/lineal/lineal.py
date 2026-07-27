@@ -190,10 +190,10 @@ class LinealSpring(WireCharacteristics):
         if self.spring_index == 0:
             self.calculate_spring_index()
         self.wahl_factor = (4 * self.spring_index - 1) / (4 * self.spring_index - 4) + 0.615 / self.spring_index
-        """Evaluate the Wahl factor and classify it into categories"""
-        if self.wahl_factor < WAHL_FACTOR_CONSTANTS['red'][1]:
+        """Classify the spring index into a manufacturability category"""
+        if self.spring_index < WAHL_FACTOR_CONSTANTS['red'][1]:
             self.wahl_factor_category = 'red'
-        elif WAHL_FACTOR_CONSTANTS['orange'][0] <= self.wahl_factor < WAHL_FACTOR_CONSTANTS['orange'][1]:
+        elif WAHL_FACTOR_CONSTANTS['orange'][0] <= self.spring_index < WAHL_FACTOR_CONSTANTS['orange'][1]:
             self.wahl_factor_category = 'orange'
         else:
             self.wahl_factor_category = 'green'
@@ -213,13 +213,13 @@ class LinealSpring(WireCharacteristics):
             self.calculate_spring_constant()
         self.position_length = length
         self.position_load = spring_class * self.spring_constant * (self.free_length - self.position_length)
-        self.calculate_stress_at_position()
+        self.calculate_stress_at_position(self.position_load)
         return self.position_load
 
-    def calculate_stress_at_position(self):
+    def calculate_stress_at_position(self, load: float):
         """Calculate the stress in the spring wire at a given predefined position"""
         try:
-            stress = (8 * self.mean_diameter * self.position_load) / (3.1416 * self.wire_diameter**3) * self.wahl_factor
+            stress = (8 * self.mean_diameter * load) / (3.1416 * self.wire_diameter**3) * self.wahl_factor
             return stress
         except ValueError as e:
-            raise ValueError(f"Error calculating stress at position {self.position_length}: {e}")
+            raise ValueError(f"Error calculating stress at position with load {load}: {e}")

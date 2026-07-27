@@ -61,6 +61,343 @@ report = SpringPDFReport(spring, title="Spring XYZ-123")
 report.build("spring_report.pdf")
 ```
 
+## API Reference
+
+- [Material data](#material-data) — `Material`, `get_available_materials()`
+- [Wire characteristics](#wire-characteristics) — `WireCharacteristics`
+- [Compression springs](#compression-springs) — `CompressionSpring`
+- [Extension springs](#extension-springs) — `ExtensionSpring`
+- [Torsion springs](#torsion-springs) — `TorsionSpring`
+- [Fatigue analysis (Goodman diagram)](#fatigue-analysis-goodman-diagram) — `GoodmanData`, `GoodmanAnalyzer`, `Goodman`, `generate_goodman_diagram()`
+- [Position tables](#position-tables) — `LinearPositionsTable`, `AngularPositionsTable`
+- [PDF reports](#pdf-reports) — `SpringPDFReport`
+- [Advanced: variable-geometry springs](#advanced-variable-geometry-springs) — `VariableLinealSpring`, `CompressionSpringGeneral`
+
+All physical quantities are [`pint`](https://pint.readthedocs.io/) `Quantity`
+objects (a number with a unit, e.g. `20.0 millimeter`). Plain numbers passed
+into a field are usually interpreted in that field's default unit (mm, N,
+degrees...), but a few methods require an explicit `Quantity` — those are
+called out below. Import the shared unit registry with:
+
+```python
+from springcalc.pymodels.units import ureg
+
+length = 20 * ureg.mm
+angle = 90 * ureg.degree
+```
+
+### Material data
+
+`Material` (`springcalc.pymodels.material.Material`) is a pydantic model that
+looks up a named material's mechanical properties from `material/materials.csv`
+and auto-fills any field you don't pass explicitly.
+
+| Member | Description |
+|---|---|
+| `Material(material_name, young_modulus=None, shear_modulus=None, elastic_limit_factor=None, poisson_coef=None, RMa_file=None)` | Construct a material by name; unset fields are auto-filled from `materials.csv`. |
+| `.young_modulus` | Young's modulus E, as a `Quantity` in MPa. |
+| `.shear_modulus` | Shear modulus G, as a `Quantity` in MPa. |
+| `.elastic_limit_factor` | Dimensionless factor used to derive the fatigue limit. |
+| `.poisson_coef` | Poisson's ratio (dimensionless). |
+| `.RMa_file` | Name of the CSV (in `material/`) with tensile-strength ranges by wire diameter. |
+| `get_available_materials()` | Module-level function: list of valid `material_name` values. |
+
+```python
+from springcalc import Material, get_available_materials
+
+print(get_available_materials())
+# ['SL', 'SM', 'DM', 'SH', 'DH', 'TDC', 'TDCrV', ...]
+
+material = Material(material_name="SH")
+print(material.young_modulus)    # 206000.0 megapascal
+print(material.shear_modulus)    # 81500.0 megapascal
+print(material.poisson_coef)     # 0.3 dimensionless
+```
+
+### Wire characteristics
+
+`WireCharacteristics` (`springcalc.pymodels.wire_characteristics.WireCharacteristics`)
+is the base class of every spring type. Given a material and a wire diameter,
+it looks up the wire diameter tolerance and the tensile-strength range (RMa)
+for that diameter.
+
+| Member | Description |
+|---|---|
+| `WireCharacteristics(material, wire_diameter)` | `wire_diameter` may be a plain number (interpreted in mm) or a `Quantity`. |
+| `.diameter_tolerance` | Manufacturing tolerance for this diameter (from `DIAMETRO_TOLERANCIAS.csv`). |
+| `.RMa_min` / `.RMa_max` | Tensile-strength range for this material and diameter, from `material.RMa_file`. |
+| `.set_material(material, wire_diameter)` | Re-assign the material/diameter and refresh the derived fields. |
+
+```python
+from springcalc import Material
+from springcalc.pymodels.wire_characteristics import WireCharacteristics
+
+material = Material(material_name="SH")
+wire = WireCharacteristics(material=material, wire_diameter=2.0)
+print(wire.diameter_tolerance)          # 0.025
+print(wire.RMa_min, wire.RMa_max)       # 1980.0 2200.0
+```
+
+### Compression springs
+
+`CompressionSpring` (`springcalc.lineal.compresion.CompressionSpring`, also
+exported as `springcalc.CompressionSpring`) is the main entry point for
+helical compression springs. It extends `LinealSpring`
+(`springcalc.lineal.lineal.LinealSpring`), the shared calculation engine also
+used by `ExtensionSpring`.
+
+| Method | Description |
+|---|---|
+| `CompressionSpring(material, wire_diameter, **data)` | Create the spring. |
+| `.set_diameter(mean_diameter=None, outer_diameter=None, inner_diameter=None)` | Set exactly one of the three diameters; derives the others and the spring index/Wahl factor. |
+| `.calculate_spring_properties(nr_coils=None, pitch=None, free_length=None)` | Provide exactly two of the three; computes coils, active coils, Wahl factor, spring constant, solid length, and wire length. |
+| `.add_load_position(length)` | Record the load/stress/outer-diameter at a given compressed length, for the load-position table and fatigue analysis. |
+| `.empty_tables()` | Clear the recorded load positions. |
+| `.get_spring_data()` | `dict` with all computed spring properties (material, diameters, constants, Wahl factor, etc.). |
+| `.get_data_positions()` / `.get_data_travels()` | List of `LinearLoadPosition` recorded via `add_load_position`. |
+| `.get_forces_vs_position_graph(show=False)` | Load vs. absolute position curve; returns a base64-encoded PNG. |
+| `.get_forces_vs_travel_graph(show=False)` | Load vs. travel (compression from free length) curve; returns a base64 PNG. |
+| `.get_diameter_graph(show=False)` | Outer diameter vs. position curve; returns a base64 PNG. |
+| `.get_diameter_vs_position_graph(show=False)` | Outer diameter curve plus a to-scale cross-section diagram; returns a base64 PNG. |
+| `.create_goodman_diagram(show=False)` | Runs the fatigue (Goodman) analysis from the recorded positions; returns `{"image", "analysis", "stresses"}` or `{"error", "traceback"}`. |
+| `.get_stress_max()` / `.get_stress_min()` | Max/min stress across recorded positions (raises if none are recorded). |
+| `.get_load_max()` / `.get_load_min()` | Max/min load across recorded positions. |
+| `.calculate_solid_length()` | Coils-stacked solid (fully compressed) length. |
+| `.calculate_wire_length()` | Total wire length needed to wind the spring. |
+| `.set_number_cycles(number_cycles)` | Design life, in cycles, used by the fatigue analysis (default 1e6). |
+
+```python
+from springcalc import Material, CompressionSpring
+
+material = Material(material_name="SL")
+spring = CompressionSpring(material=material, wire_diameter=2.5)
+spring.set_diameter(outer_diameter=30)          # mm
+spring.calculate_spring_properties(pitch=20, free_length=100)
+
+for length_mm in [30, 40, 50, 60, 70, 80, 90, 100]:
+    spring.add_load_position(length=length_mm)
+
+data = spring.get_spring_data()
+print(data["spring_constant"])          # ~7.09 N / mm
+print(data["wahl_factor_category"])     # 'green' -> C=11 is in a normal manufacturable range
+
+# Graphs (base64 PNGs, ready to embed in HTML or a PDF)
+load_vs_position_png = spring.get_forces_vs_position_graph()
+diameter_png = spring.get_diameter_vs_position_graph()
+
+# Fatigue analysis from the recorded positions
+result = spring.create_goodman_diagram()
+print(result["analysis"]["safety_factor"])
+```
+
+### Extension springs
+
+`ExtensionSpring` (`springcalc.lineal.traccion.ExtensionSpring`, also exported
+as `springcalc.ExtensionSpring`) models helical extension springs. It extends
+`LinealSpring` directly (not `CompressionSpring`) and its diameter/length
+setters require explicit `Quantity` values rather than plain numbers.
+
+| Method | Description |
+|---|---|
+| `ExtensionSpring(material, wire_diameter, **data)` | Create the spring. |
+| `.set_diameter(outer_diameter=None, inner_diameter=None, mean_diameter=None)` | Set exactly one diameter. **Must be a `Quantity`** (e.g. `15 * ureg.mm`), not a plain number. |
+| `.calculate_spring_properties(nr_coils=None, pitch=None, free_length=None)` | Provide exactly two of the three; computes active coils, spring constant, and wire length. |
+| `.add_load_position(length)` | Record the load/stress/outer-diameter at a given extended length (must be ≥ free length). |
+| `.calculate_positions_table(step: list)` | Convenience: call `add_load_position` for each length in `step`. |
+| `.empty_tables()` | Clear the recorded load positions. |
+| `.get_spring_data()` | `dict` with all computed spring properties. |
+| `.get_data_positions()` / `.get_data_travels()` | List of recorded `LinearLoadPosition`. |
+| `.get_forces_vs_position_graph(show=False)` / `.get_forces_vs_travel_graph(show=False)` | Load curves; return base64 PNGs. |
+| `.get_diameter_graph()` / `.get_diameter_vs_position_graph()` | Diameter curves (no `show` parameter on this class); return base64 PNGs. |
+| `.create_goodman_diagram()` | Fatigue analysis from the recorded positions; returns `{"image", "analysis", "stresses"}` or `{"error", "traceback"}` (no `show` parameter). |
+| `.get_stress_max()` / `.get_stress_min()` / `.get_load_max()` / `.get_load_min()` | Extremes across recorded positions. |
+| `.set_number_cycles(number_cycles)` | Design life in cycles for the fatigue analysis. |
+| `.set_initial_stress(initial_stress)` | Set the spring's initial tension (pre-load) stress. |
+
+```python
+from springcalc import Material, ExtensionSpring
+from springcalc.pymodels.units import ureg
+
+material = Material(material_name="SH")
+spring = ExtensionSpring(material=material, wire_diameter=1.5)
+spring.set_diameter(outer_diameter=15 * ureg.mm)   # note: needs a Quantity, unlike CompressionSpring
+spring.calculate_spring_properties(nr_coils=10, free_length=60)
+
+spring.calculate_positions_table([65, 70, 75, 80])  # extend beyond the free length
+
+data = spring.get_spring_data()
+print(data["spring_constant"])   # ~2.33 N / mm
+
+result = spring.create_goodman_diagram()
+print(result["analysis"]["safety_factor"])
+```
+
+### Torsion springs
+
+`TorsionSpring` (`springcalc.lineal.torsion.TorsionSpring`, also exported as
+`springcalc.TorsionSpring`) models helical torsion springs, tracking angular
+position/travel and torque instead of linear load. It extends
+`WireCharacteristics` directly and has no Goodman/fatigue integration.
+
+| Method | Description |
+|---|---|
+| `TorsionSpring(material, wire_diameter, **data)` | Create the spring. |
+| `.configure_spring(mean_diameter, nr_coils, pitch, free_angle, fixed_leg_radius, mobile_leg_radius)` | One-call setup: sets geometry and computes every derived property. Returns `.get_spring_properties()`. |
+| `.calculate_spring_properties()` | Re-run the derived-property calculations after changing an input. |
+| `.add_position(angle_travel=None, torque=None)` | Record a working position from either an angular travel or a torque (exactly one). |
+| `.clean_positions()` | Clear the recorded positions. |
+| `.get_positions()` / `.get_data_positions()` / `.get_data_travels()` | List of recorded `AngularLoadPosition`. |
+| `.get_spring_properties()` | `dict` with all computed properties (diameters, angles, leg lengths, spring constant, Wahl factor, etc.). |
+| `.calculate_torque(rotation_angle)` | Torque required for a given rotation angle. |
+| `.calculate_stress(torque)` | Max wire stress for a given torque. |
+| `.get_forces_vs_position_graph(show=False)` / `.get_forces_vs_travel_graph(show=False)` | Torque vs. angular position/travel curves; return base64 PNGs. |
+| `.get_diameter_vs_position_graph(show=False)` | Outer diameter curve plus a cross-section diagram; returns a base64 PNG. |
+| `.set_number_cycles(number_cycles)` / `.set_shot_peening(shot_peening)` | Fatigue-related inputs (stored but not yet used by a Goodman analysis for this class). |
+
+```python
+from springcalc import Material, TorsionSpring
+from springcalc.pymodels.units import ureg
+
+material = Material(material_name="SH")
+spring = TorsionSpring(material=material, wire_diameter=1.0)
+spring.configure_spring(
+    mean_diameter=10 * ureg.mm,
+    nr_coils=8,
+    pitch=1.2 * ureg.mm,
+    free_angle=180 * ureg.degree,
+    fixed_leg_radius=15 * ureg.mm,
+    mobile_leg_radius=15 * ureg.mm,
+)
+print(spring.spring_constant)   # ~35 mm*N/rad
+
+spring.add_position(angle_travel=30 * ureg.degree)
+for position in spring.get_positions():
+    print(position)
+```
+
+### Fatigue analysis (Goodman diagram)
+
+`springcalc.lineal.goodman` implements the modified-Goodman fatigue check
+(Shigley, ch. 6/10) for spring wire in torsion, axial, or flexural loading.
+`CompressionSpring.create_goodman_diagram()` and
+`ExtensionSpring.create_goodman_diagram()` use this internally, but it can
+also be used directly.
+
+| Member | Description |
+|---|---|
+| `GoodmanData(material, diameter, load_type="axial", cycles=1e6)` | Pydantic input model. `load_type` is `"axial"`, `"torsion"`, or `"flexion"`. |
+| `GoodmanAnalyzer(data, shot_peening=False)` | Computes the Marin correction factors, the corrected endurance limit `Sse` and fatigue strength `Ssf`. |
+| `.calculate_safety_factor(sigma_max, sigma_min)` | Modified-Goodman safety factor for an operating stress cycle. |
+| `.get_analysis_summary(sigma_max, sigma_min)` | `dict` with the correction factors, strengths, operating point, and safety factor. |
+| `.plot_diagram(sigma_max, sigma_min, show_plot=True)` | Returns a matplotlib `Figure` with the Goodman envelope and the operating point plotted. |
+| `.get_diagram_image(sigma_max, sigma_min)` | Same diagram, returned as a base64 PNG string. |
+| `Goodman(material, diameter, load_type="axial", number_cycles=1e6, shot_peening=False)` | Backwards-compatible wrapper around `GoodmanAnalyzer` with the same methods (`plot_goodman_graph`, `get_goodman_graph`, etc.). |
+| `generate_goodman_diagram(spring, initial_length, final_length, shot_peening=False, number_cycles=1e6)` | Module function in `springcalc.plots`: derives max/min load and stress for a spring compressed between two lengths, and returns the same `{"image", "analysis", "stresses"}` dict. **`initial_length`/`final_length` must be `Quantity` values** (they're subtracted directly from `spring.free_length`). |
+
+```python
+from springcalc import Material, GoodmanData, GoodmanAnalyzer
+
+material = Material(material_name="DH")
+data = GoodmanData(material=material, diameter=1.0, load_type="torsion", cycles=1e5)
+analyzer = GoodmanAnalyzer(data)
+
+sigma_max, sigma_min = 400, 100   # MPa
+print(analyzer.calculate_safety_factor(sigma_max, sigma_min))
+summary = analyzer.get_analysis_summary(sigma_max, sigma_min)
+print(summary["strengths"]["Se_MPa"], summary["strengths"]["Sf_MPa"])
+```
+
+Using the standalone helper directly on a `CompressionSpring` instance (see
+the [Compression springs](#compression-springs) example for how `spring` was
+built), instead of calling `spring.create_goodman_diagram()`:
+
+```python
+from springcalc.plots import generate_goodman_diagram
+from springcalc.pymodels.units import ureg
+
+result = generate_goodman_diagram(spring, initial_length=100 * ureg.mm, final_length=40 * ureg.mm)
+print(result["analysis"]["safety_factor"])
+```
+
+### Position tables
+
+Every spring stores its recorded working positions in a pydantic list model
+under `.positions`, populated via each spring's `add_load_position`/
+`add_position` method rather than built by hand — but they're documented here
+since `.get_data_positions()` returns their contents.
+
+| Model | Used by | Fields |
+|---|---|---|
+| `LinearLoadPosition` (`springcalc.pymodels.positions`) | `CompressionSpring`, `ExtensionSpring` | `.position`, `.travel`, `.load` (N), `.stress` (MPa), `.outer_diameter`, `.inner_diameter` — all `Quantity`. |
+| `LinearPositionsTable` | same | `.positions`: `list[LinearLoadPosition]`. `.add_load_position(...)`, `.clear_table()`. |
+| `AngularLoadPosition` | `TorsionSpring` | Same fields as above, with `.position`/`.travel` in degrees and `.load` in N·mm (torque). |
+| `AngularPositionsTable` | `TorsionSpring` | `.positions`: `list[AngularLoadPosition]`. `.add_load_position(...)`, `.clear_table()`. |
+
+```python
+# `spring` is any CompressionSpring/ExtensionSpring/TorsionSpring instance
+# with load positions already recorded via add_load_position/add_position.
+for position in spring.get_data_positions():
+    print(position.position, position.load, position.stress)
+```
+
+### PDF reports
+
+`SpringPDFReport` (`springcalc.report.SpringPDFReport`, also exported as
+`springcalc.SpringPDFReport`) renders a `CompressionSpring`'s data, curves,
+and Goodman diagram into a printable PDF using `reportlab`.
+
+| Method | Description |
+|---|---|
+| `SpringPDFReport(spring, title=None)` | Wrap a `CompressionSpring` (with load positions already added via `add_load_position`, for the fullest report). |
+| `.build(output_path)` | Render the report and write it to `output_path`. Returns the path. Degrades gracefully (with a placeholder message) if a graph or the Goodman analysis can't be generated, e.g. no load positions recorded yet. |
+
+```python
+from springcalc.report import SpringPDFReport
+
+# `spring` is a CompressionSpring instance (see the Compression springs example)
+report = SpringPDFReport(spring, title="Spring XYZ-123")
+report.build("spring_report.pdf")
+```
+
+### Advanced: variable-geometry springs
+
+`VariableLinealSpring` and `CompressionSpringGeneral`
+(`springcalc.lineal.generic_lineal` / `springcalc.lineal.generic_compression`)
+model compression springs whose mean diameter and/or pitch vary along their
+length (e.g. conical or barrel springs), by numerically integrating along the
+helix instead of using the constant-geometry closed-form equations. They are
+not exported from the top-level `springcalc` package — import them from their
+modules directly. For a constant-diameter, constant-pitch spring they agree
+with the closed-form `CompressionSpring` results.
+
+| Method | Description |
+|---|---|
+| `CompressionSpringGeneral(material, wire_diameter, **data)` | Create the spring. Set `.mean_diameter_init`, `.pitch_constant`, and `.free_length` for a constant-geometry spring, or... |
+| `.establish_geometrical_function(func_D, func_p)` | ...inject custom functions `h -> mean_diameter` and `h -> pitch` (both `Quantity -> Quantity`) for a true variable-geometry spring. |
+| `.calculate_theta_max()` | Total helix rotation angle (rad) needed to reach `free_length`; also updates `.nr_coils`. |
+| `.calculate_spring_constant(num_points=500)` | Equivalent stiffness, integrating the local flexibility along the helix. |
+| `.calculate_wire_length(num_points=500)` | Total wire length, integrating the 3D arc length along the helix. |
+| `.calculate_solid_length()` | Solid (fully compressed) length, accounting for coil telescoping/nesting when the diameter varies enough. |
+| `.simulate_progressive_compression(max_deflection, steps=100, num_points=500)` | Step-by-step compression simulation that detects coil-to-coil (oblique) contact; returns `(deflection, force, instantaneous_stiffness)` arrays. |
+
+```python
+from springcalc import Material
+from springcalc.pymodels.units import ureg
+from springcalc.lineal.generic_compression import CompressionSpringGeneral
+
+material = Material(material_name="SH")
+spring = CompressionSpringGeneral(material=material, wire_diameter=2.0)
+spring.mean_diameter_init = 20 * ureg.mm
+spring.pitch_constant = 6 * ureg.mm
+spring.free_length = 60 * ureg.mm
+
+spring.calculate_theta_max()
+print(spring.calculate_spring_constant())   # matches G*d^4/(8*D^3*n) for constant geometry
+
+deflection, force, stiffness = spring.simulate_progressive_compression(max_deflection=20 * ureg.mm, steps=20)
+print(force[-1])   # ~40.75 N
+```
+
 ## Tests
 
 ```bash

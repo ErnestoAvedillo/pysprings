@@ -1,6 +1,6 @@
 [project]
 name = "springcalc"
-version = "0.1.0"
+version = "0.1.1"
 description = "Spring calculation library: compression, extension, and torsion."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,6 +20,7 @@ classifiers = [
     "Topic :: Scientific/Engineering",
 ]
 dependencies = [
+    "build>=1.5.0",
     "matplotlib>=3.11.1",
     "numpy>=2.0",
     "pandas>=2.2",
@@ -27,6 +28,7 @@ dependencies = [
     "pydantic>=2.13.4",
     "reportlab>=4.0",
     "scipy>=1.14",
+    "twine>=6.2.0",
 ]
 
 [project.optional-dependencies]
