@@ -1,12 +1,9 @@
 from math import pi
-from pydantic import field_validator, model_validator, ConfigDict
-from .constants import WAHL_FACTOR_CONSTANTS, COMPRESSION_SPRING_END_TYPES, FORMING_TYPES
-from ..pymodels.wire_characteristics import WireCharacteristics
-from ..pymodels.material import Material
+from pydantic import field_validator, ConfigDict
+from .constants import COMPRESSION_SPRING_END_TYPES, FORMING_TYPES
 from .goodman import Goodman
 import traceback
-from typing import List, Optional
-import os
+from typing import Optional
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
@@ -55,6 +52,35 @@ class CompressionSpring(LinealSpring):
 
     def set_material(self, material, wire_diameter):
         return super().set_material(material, wire_diameter)
+
+    def set_geometry(self,
+                     mean_diameter: float = None,
+                     outer_diameter: float = None,
+                     inner_diameter: float = None,
+                     nr_coils: float = None,
+                     pitch: float = None,
+                     free_length: float = None):
+        """Set the spring's full geometry in one call.
+
+        Provide exactly one of mean_diameter, outer_diameter, inner_diameter,
+        and exactly two of nr_coils, pitch, free_length. Computes and stores
+        every derived spring property, same as calling set_diameter() followed
+        by calculate_spring_properties().
+        """
+        diameters_provided = sum(1 for var in [mean_diameter, outer_diameter, inner_diameter] if var is not None)
+        if diameters_provided != 1:
+            raise ValueError("You must provide exactly one of the following variables: mean_diameter, outer_diameter, inner_diameter")
+
+        length_params_provided = sum(1 for var in [nr_coils, pitch, free_length] if var is not None)
+        if length_params_provided != 2:
+            raise ValueError("You must provide exactly two of the following variables: nr_coils, pitch, free_length")
+
+        self.set_diameter(mean_diameter=mean_diameter,
+                          outer_diameter=outer_diameter,
+                          inner_diameter=inner_diameter)
+        return self.calculate_spring_properties(nr_coils=nr_coils,
+                                                pitch=pitch,
+                                                free_length=free_length)
 
     def calculate_spring_properties(self,
                                     nr_coils: float = None,

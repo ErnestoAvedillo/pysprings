@@ -4,9 +4,9 @@ A Python library for **spring calculations**: compression, extension, and
 torsion springs. Includes material data, wire characteristic calculations,
 and fatigue analysis via the Goodman diagram.
 
-> The code was extracted from a Django web application and reorganized as a
-> standalone library. The web layer (views, templates, `static/`) is not part
-> of the library.
+Visit the library in my guithub https://github.com/ErnestoAvedillo/springcalc  and clone my repository using:
+
+    git clone git@github.com:ErnestoAvedillo/springcalc.git
 
 ## Structure
 
@@ -27,16 +27,12 @@ docs/                   Reference material (spreadsheet, figures)
 
 ## Installation
 
-The project uses [uv](https://docs.astral.sh/uv/):
+I recommend to use uv to install the library (https://docs.astral.sh/uv/):
 
 ```bash
-uv sync                 # create the environment and install dependencies
-```
-
-Or with pip in editable mode:
-
-```bash
-pip install -e ".[dev]"
+# create the environment and install dependencies
+uv init
+uv add springcalc
 ```
 
 ## Usage
@@ -45,8 +41,8 @@ pip install -e ".[dev]"
 from springcalc import Material, CompressionSpring
 
 material = Material(material_name="SH")
-spring = CompressionSpring(material=material, wire_diameter=2.0)
-spring.nr_coils = 8
+spring = CompressionSpring(material=material, wire_diameter=1.0)
+spring.set_geometry(outer_diameter=10.0, free_length=50.0, nr_coils=10)
 print(spring.calculate_solid_length())
 print(spring.calculate_pitch())
 ```
@@ -149,6 +145,7 @@ used by `ExtensionSpring`.
 | Method | Description |
 |---|---|
 | `CompressionSpring(material, wire_diameter, **data)` | Create the spring. |
+| `.set_geometry(mean_diameter=None, outer_diameter=None, inner_diameter=None, nr_coils=None, pitch=None, free_length=None)` | Set the full geometry in one call: exactly one diameter and exactly two of `nr_coils`/`pitch`/`free_length`. Equivalent to calling `.set_diameter()` followed by `.calculate_spring_properties()`. Returns `.get_spring_data()`. |
 | `.set_diameter(mean_diameter=None, outer_diameter=None, inner_diameter=None)` | Set exactly one of the three diameters; derives the others and the spring index/Wahl factor. |
 | `.calculate_spring_properties(nr_coils=None, pitch=None, free_length=None)` | Provide exactly two of the three; computes coils, active coils, Wahl factor, spring constant, solid length, and wire length. |
 | `.add_load_position(length)` | Record the load/stress/outer-diameter at a given compressed length, for the load-position table and fatigue analysis. |
@@ -171,8 +168,11 @@ from springcalc import Material, CompressionSpring
 
 material = Material(material_name="SL")
 spring = CompressionSpring(material=material, wire_diameter=2.5)
-spring.set_diameter(outer_diameter=30)          # mm
-spring.calculate_spring_properties(pitch=20, free_length=100)
+spring.set_geometry(outer_diameter=30, pitch=20, free_length=100)  # mm
+
+# Equivalent to calling separately:
+#   spring.set_diameter(outer_diameter=30)
+#   spring.calculate_spring_properties(pitch=20, free_length=100)
 
 for length_mm in [30, 40, 50, 60, 70, 80, 90, 100]:
     spring.add_load_position(length=length_mm)
