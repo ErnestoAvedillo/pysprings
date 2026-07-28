@@ -7,7 +7,7 @@ Main public API:
 """
 
 from springcalc.lineal.compresion import CompressionSpring
-from springcalc.lineal.traccion import ExtensionSpring
+from springcalc.lineal.extension import ExtensionSpring
 from springcalc.lineal.torsion import TorsionSpring
 from springcalc.lineal.goodman import Goodman, GoodmanAnalyzer, GoodmanData
 from springcalc.pymodels.material import Material, get_available_materials

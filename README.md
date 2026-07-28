@@ -193,7 +193,7 @@ print(result["analysis"]["safety_factor"])
 
 ### Extension springs
 
-`ExtensionSpring` (`springcalc.lineal.traccion.ExtensionSpring`, also exported
+`ExtensionSpring` (`springcalc.lineal.extension.ExtensionSpring`, also exported
 as `springcalc.ExtensionSpring`) models helical extension springs. It extends
 `LinealSpring` directly (not `CompressionSpring`) and its diameter/length
 setters require explicit `Quantity` values rather than plain numbers.

@@ -1,4 +1,4 @@
-from springcalc.lineal.traccion import ExtensionSpring
+from springcalc.lineal.extension import ExtensionSpring
 from springcalc.pymodels.material import Material
 
 # Create the material first
@@ -33,6 +33,7 @@ spring.get_diameter_graph(show=True)
 spring.get_diameter_vs_position_graph(show=True)
 spring.create_goodman_diagram(show=True)
 
+spring.set_diameter(inner_diameter=30)
 spring.calculate_spring_properties(nr_coils=10, pitch=None, free_length=100)
 
 positions = [100, 110, 120, 130, 140, 150, 160, 170]
@@ -56,6 +57,29 @@ spring.get_diameter_graph(show=True)
 spring.get_diameter_vs_position_graph(show=True)
 spring.create_goodman_diagram(show=True)
 
+spring.set_diameter(mean_diameter=30)
+spring.calculate_spring_properties(nr_coils=10, pitch=None, free_length=100)
+
+positions = [100, 110, 120, 130, 140, 150, 160, 170]
+for pos in positions:
+    try:
+        spring.add_load_position(length=pos)
+    except ValueError as e:
+        print(f"Error adding load position at length {pos}: {e}")
+
+spring_data = spring.get_spring_data()
+for key, value in spring_data.items():
+    print(f"{key}: {value}")
+
+data_positions = spring.get_data_positions()
+for pc in data_positions:
+    print(f"Position: {pc.position}, Load: {pc.load}, Stress: {pc.stress}, Outer Diameter: {pc.outer_diameter}")
+
+spring.get_forces_vs_position_graph(show=True)
+spring.get_forces_vs_travel_graph(show=True)
+spring.get_diameter_graph(show=True)
+spring.get_diameter_vs_position_graph(show=True)
+spring.create_goodman_diagram(show=True)
 
 
 print("🎉 Test completed successfully!")
