@@ -199,14 +199,16 @@ class TorsionSpring(WireCharacteristics):
         self.positions = AngularPositionsTable()
 
     def set_geometry(self,
-                         mean_diameter: float,
-                         nr_coils: int,
-                         pitch: float,
-                         free_angle: float,
-                         fixed_leg_radius: float,
-                         mobile_leg_radius: float):
+                     inner_diameter: float = None,
+                     mean_diameter: float = None,
+                     outer_diameter: float = None,
+                     nr_coils: int = None,
+                     pitch: float = None,
+                     free_angle: float = None,
+                     fixed_leg_radius: float = None,
+                     mobile_leg_radius: float = None):
         """Configure the torsion spring with the given parameters"""
-        self.set_mean_diameter(mean_diameter)
+        self.set_diameter(mean_diameter=mean_diameter, outer_diameter=outer_diameter, inner_diameter=inner_diameter)
         self.set_nr_coils(nr_coils)
         self.set_pitch(pitch)
         self.set_free_angle(free_angle)
@@ -235,7 +237,47 @@ class TorsionSpring(WireCharacteristics):
         if wire_diameter is None:
             raise ValueError("""You must provide the wire diameter to
                             set the material""")
+    def set_diameter(
+            self,
+            outer_diameter: float = None,
+            inner_diameter: float = None,
+            mean_diameter: float = None,
+            ):
+        if sum(1 for var in [outer_diameter,
+                             inner_diameter,
+                             mean_diameter] if var is not None) != 1:
+            raise ValueError("""You must provide exactly one of the three
+                             diameters: outer, inner, mean""")
 
+        if mean_diameter is not None:
+            self.set_mean_diameter(mean_diameter)
+        else:
+            mean_diameter = self.calculate_mean_diameter(outer_diameter,
+                                                          inner_diameter)
+            self.set_mean_diameter(mean_diameter)
+
+    def calculate_mean_diameter(self, outer_diameter=None, inner_diameter=None):
+        """Calculate the spring's mean diameter"""
+        provided = sum(1 for var in [outer_diameter, inner_diameter] if var is not None)
+
+        if provided == 0:
+            raise ValueError("You must provide at least one of outer_diameter or inner_diameter")
+
+        if provided == 2:
+            self.mean_diameter = (outer_diameter + inner_diameter) / 2
+            self.wire_diameter = outer_diameter - self.mean_diameter.magnitude
+            return self.mean_diameter
+
+        if self.wire_diameter <= 0 or self.wire_diameter is None:
+            raise ValueError("""The wire diameter must be a positive
+                             non-null value to calculate the mean diameter""")
+        if inner_diameter is not None:
+            mean_diameter = inner_diameter + self.wire_diameter.magnitude
+        else:
+            mean_diameter = outer_diameter - self.wire_diameter.magnitude
+        self.set_mean_diameter(mean_diameter)
+        return self.mean_diameter
+    
     def set_mean_diameter(self, mean_diameter):
         """Set the torsion spring's mean diameter"""
         if _mag(mean_diameter) <= 0:
