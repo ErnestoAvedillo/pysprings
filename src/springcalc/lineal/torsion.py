@@ -3,9 +3,7 @@ from math import pi
 import io
 import base64
 import numpy as np
-from math import sqrt, atan
-import matplotlib
-matplotlib.use('Agg')
+from math import atan
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 from springcalc.pymodels.material import Material
@@ -14,7 +12,9 @@ from typing import Optional
 from springcalc.pymodels.positions import AngularPositionsTable
 from pint import Quantity
 from springcalc.pymodels.units import ureg
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import ConfigDict, field_validator
+import matplotlib
+matplotlib.use('Agg')
 
 
 def _mag(v):
@@ -198,7 +198,7 @@ class TorsionSpring(WireCharacteristics):
         # List of positions for fatigue analysis
         self.positions = AngularPositionsTable()
 
-    def configure_spring(self,
+    def set_geometry(self,
                          mean_diameter: float,
                          nr_coils: int,
                          pitch: float,

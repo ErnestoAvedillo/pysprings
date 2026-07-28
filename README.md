@@ -243,7 +243,7 @@ position/travel and torque instead of linear load. It extends
 | Method | Description |
 |---|---|
 | `TorsionSpring(material, wire_diameter, **data)` | Create the spring. |
-| `.configure_spring(mean_diameter, nr_coils, pitch, free_angle, fixed_leg_radius, mobile_leg_radius)` | One-call setup: sets geometry and computes every derived property. Returns `.get_spring_properties()`. |
+| `.set_geometry(mean_diameter, nr_coils, pitch, free_angle, fixed_leg_radius, mobile_leg_radius)` | One-call setup: sets geometry and computes every derived property. Returns `.get_spring_properties()`. |
 | `.calculate_spring_properties()` | Re-run the derived-property calculations after changing an input. |
 | `.add_position(angle_travel=None, torque=None)` | Record a working position from either an angular travel or a torque (exactly one). |
 | `.clean_positions()` | Clear the recorded positions. |
@@ -261,7 +261,7 @@ from springcalc.pymodels.units import ureg
 
 material = Material(material_name="SH")
 spring = TorsionSpring(material=material, wire_diameter=1.0)
-spring.configure_spring(
+spring.set_geometry(
     mean_diameter=10 * ureg.mm,
     nr_coils=8,
     pitch=1.2 * ureg.mm,

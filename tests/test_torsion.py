@@ -7,7 +7,7 @@ material = Material(material_name="SL")
 # Create the spring with the correct class
 spring = TorsionSpring(material=material, wire_diameter=2.5)
 # Configure the spring's properties (using the correct method names)
-spring.configure_spring(
+spring.set_geometry(
     mean_diameter=20.0,
     nr_coils=10,
     pitch=5.0,
