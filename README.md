@@ -43,8 +43,9 @@ from springcalc import Material, CompressionSpring
 material = Material(material_name="SH")
 spring = CompressionSpring(material=material, wire_diameter=1.0)
 spring.set_geometry(outer_diameter=10.0, free_length=50.0, nr_coils=10)
-print(spring.calculate_solid_length())
-print(spring.calculate_pitch())
+properties = compression_spring.get_spring_data()
+    for key, value in properties.items():
+        print(f"{key}: {value}")                       )
 ```
 
 Generating a PDF report (spring data, load/travel/diameter curves, and the

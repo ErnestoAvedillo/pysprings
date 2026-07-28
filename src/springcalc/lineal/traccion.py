@@ -12,7 +12,7 @@ from ..pymodels.material import Material
 from .lineal import LinealSpring, TENSION
 from pint import Quantity
 from springcalc.pymodels.units import ureg
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import field_validator
 
 matplotlib.use('Agg')
 
@@ -23,6 +23,7 @@ class ExtensionSpring(LinealSpring):
     nr_coils: Optional[float] = None
     initial_force: Optional[Quantity] = 0.0 * ureg.N
     initial_stress: Optional[Quantity] = 0.0 * ureg.MPa
+    length_btw_hooks: Optional[Quantity] = 0.0 * ureg.mm
 
     @field_validator("wire_length", mode="before")
     @classmethod
@@ -105,13 +106,46 @@ class ExtensionSpring(LinealSpring):
 
         self.calculate_wahl_factor()
 
+    def set_geometry(self,
+                     mean_diameter: float = None,
+                     outer_diameter: float = None,
+                     inner_diameter: float = None,
+                     nr_coils: float = None,
+                     pitch: float = None,
+                     free_length: float = None):
+        """Set the spring's full geometry in one call.
+
+        Provide exactly one of mean_diameter, outer_diameter, inner_diameter,
+        and exactly two of nr_coils, pitch, free_length. Computes and stores
+        every derived spring property, same as calling set_diameter() followed
+        by calculate_spring_properties().
+        """
+        diameters_provided = sum(1 for var in [mean_diameter, outer_diameter, inner_diameter] if var is not None)
+        if diameters_provided != 1:
+            raise ValueError("You must provide exactly one of the following variables: mean_diameter, outer_diameter, inner_diameter")
+
+        length_params_provided = sum(1 for var in [nr_coils, pitch, free_length] if var is not None)
+        if length_params_provided != 3:
+            raise ValueError("You must provide all three of the following variables: nr_coils, pitch, free_length")
+
+        self.set_diameter(mean_diameter=mean_diameter,
+                          outer_diameter=outer_diameter,
+                          inner_diameter=inner_diameter)
+        self.calculate_spring_properties(nr_coils=nr_coils,
+                                         pitch=pitch,
+                                         free_length=free_length)
+        return self.get_spring_data()
+
     def calculate_spring_properties(self,
                                     nr_coils: float = None,
                                     pitch: float = None,
                                     free_length: float = None):
+        if pitch is None:
+            pitch = self.wire_diameter
+            self.pitch = self.wire_diameter
         self.set_nr_coils(nr_coils=nr_coils,
-                                pitch=pitch,
-                                free_length=free_length)
+                          pitch=pitch,
+                          free_length=free_length)
         self.calculate_spring_constant()
         self.calculate_wire_length()
 
@@ -128,9 +162,10 @@ class ExtensionSpring(LinealSpring):
         """Calculate the spring's mean diameter"""
         none_variables = sum(1 for var in [outer_diameter,
                                            inner_diameter] if var is not None)
+        
         if none_variables != 1:
             self.mean_diameter = (outer_diameter + inner_diameter) / 2
-            self.wire_diameter = outer_diameter - self.mean_diameter
+            self.wire_diameter = outer_diameter - self.mean_diameter.magnitude
             return self.mean_diameter
 
         if self.wire_diameter <= 0 or self.wire_diameter is None:
@@ -139,7 +174,7 @@ class ExtensionSpring(LinealSpring):
         if not outer_diameter:
             return (inner_diameter + self.wire_diameter)
         if not inner_diameter:
-            mean_diameter = outer_diameter - self.wire_diameter
+            mean_diameter = outer_diameter - self.wire_diameter.magnitude
         if mean_diameter <= 0:
             raise ValueError("""The calculated mean diameter must be a
                              positive value""")
@@ -165,28 +200,14 @@ class ExtensionSpring(LinealSpring):
         return self.nr_active_coils
 
     def set_nr_coils(self,
-                           nr_coils=None,
-                           pitch=None,
-                           free_length=None):
-        numero_variables = sum(1 for var in [nr_coils,
-                                             pitch,
-                                             free_length] if var is not None)
-        if numero_variables != 2:
-            raise ValueError("""You must provide exactly two variables:
-                            nr_coils, pitch, free_length""")
+                     nr_coils=None,
+                     pitch=None,
+                     free_length=None):
 
-        if pitch is None:
-            self.pitch = free_length / nr_coils
-            self.nr_coils = nr_coils
-            self.free_length = free_length
-        elif nr_coils is None:
-            self.nr_coils = free_length / pitch
-            self.pitch = pitch
-            self.free_length = free_length
-        elif free_length is None:
-            self.free_length = nr_coils * pitch
-            self.nr_coils = nr_coils
-            self.pitch = pitch
+        self.free_length = nr_coils * pitch
+        self.nr_coils = nr_coils
+        self.pitch = pitch
+        self.length_btw_hooks = self.free_length
 
         self.calculate_active_coils()
 
@@ -237,16 +258,17 @@ class ExtensionSpring(LinealSpring):
     def calculate_pitch(self):
         return self.free_length / self.nr_coils
 
-    # def calculate_load_at_position(self, length: float):
-    #     if self.spring_constant == 0:
-    #         self.calculate_spring_constant()
+    def calculate_load_at_position(self, length: float):
+        if self.spring_constant == 0:
+            self.calculate_spring_constant()
 
-    #     if length < self.free_length.magnitude:
-    #         raise ValueError("For an extension spring, the calculation length cannot be smaller than the free length")
+        if length < self.length_btw_hooks.magnitude:
+            raise ValueError("For an extension spring, the calculation length cannot be smaller than the free length")
 
-    #     extension = length - self.free_length
-    #     load = self.initial_stress + self.spring_constant * extension
-    #     return load
+        extension = (length - self.length_btw_hooks.magnitude) * ureg.mm
+        print(f"Calculating load at position with initial_force={self.initial_force}, spring_constant={self.spring_constant}, extension={extension}")
+        load = self.initial_force + self.spring_constant * extension
+        return load
 
     def calculate_stress_at_position(self, load: float):
         try:
@@ -269,7 +291,7 @@ class ExtensionSpring(LinealSpring):
     def add_load_position(self, length: float):
         try:
             self.position_length = length
-            load = self.calculate_load_at_position(length, TENSION)
+            load = self.calculate_load_at_position(length)
             stress = self.calculate_stress_at_position(load)
             outer_diameter = self.calculate_outer_diameter_at_position(self.position_length)
         except ValueError as e:
@@ -380,10 +402,13 @@ class ExtensionSpring(LinealSpring):
 
         return plot_data
 
-    def get_diameter_graph(self):
+    def get_diameter_graph(self, show=False):
+        def _to_mm_float(value):
+            return float(value.to('mm').magnitude) if isinstance(value, Quantity) else float(value)
+
         positions_table = self.positions.positions
-        positions = [pc.position for pc in positions_table]
-        diameters = [pc.outer_diameter for pc in positions_table]
+        positions = [_to_mm_float(pc.position) for pc in positions_table]
+        diameters = [_to_mm_float(pc.outer_diameter) for pc in positions_table]
 
         plot = plt.figure()
         plt.plot(positions, diameters, marker="o", color="orange")
@@ -391,7 +416,9 @@ class ExtensionSpring(LinealSpring):
         plt.xlabel("Position (mm)")
         plt.ylabel("Outer Diameter (mm)")
         plt.grid(True)
-
+        if show:
+            plt.show()
+            return None
         buf = io.BytesIO()
         plt.savefig(buf, format="png", dpi=300, bbox_inches="tight")
         buf.seek(0)
@@ -401,13 +428,18 @@ class ExtensionSpring(LinealSpring):
 
         return plot_data
 
-    def get_diameter_vs_position_graph(self):
+    def get_diameter_vs_position_graph(self, show=False):
+        def _to_mm_float(value):
+            return float(value.to('mm').magnitude) if isinstance(value, Quantity) else float(value)
+
         positions_table = self.positions.positions
-        positions = [pc.position for pc in positions_table]
-        diameters = [pc.outer_diameter for pc in positions_table]
+        positions = [_to_mm_float(pc.position) for pc in positions_table]
+        diameters = [_to_mm_float(pc.outer_diameter) for pc in positions_table]
 
         outer_diameter = self.mean_diameter + self.wire_diameter
         inner_diameter = max(self.mean_diameter - self.wire_diameter, 0)
+        outer_diameter_mm = _to_mm_float(outer_diameter)
+        inner_diameter_mm = _to_mm_float(inner_diameter)
 
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4), gridspec_kw={"width_ratios": [2, 1]})
 
@@ -420,8 +452,8 @@ class ExtensionSpring(LinealSpring):
         ax2.set_aspect("equal")
         ax2.axis("off")
 
-        outer_radius = outer_diameter / 2.0
-        inner_radius = inner_diameter / 2.0
+        outer_radius = outer_diameter_mm / 2.0
+        inner_radius = inner_diameter_mm / 2.0
         max_radius = max(outer_radius, inner_radius, 1.0)
         padding = max_radius * 0.25
 
@@ -430,14 +462,17 @@ class ExtensionSpring(LinealSpring):
             ax2.add_patch(Circle((0, 0), inner_radius, fill=False, lw=2, color="tab:blue"))
 
         ax2.plot([-outer_radius, outer_radius], [0, 0], color="tab:green", lw=1)
-        ax2.text(0, -padding, f"Dext = {outer_diameter:.2f} mm", ha="center", va="top", fontsize=8)
+        ax2.text(0, -padding, f"Dext = {outer_diameter_mm:.2f} mm", ha="center", va="top", fontsize=8)
 
         if inner_radius > 0:
             ax2.plot([0, 0], [-inner_radius, inner_radius], color="tab:blue", lw=1)
-            ax2.text(0, padding, f"Dint = {inner_diameter:.2f} mm", ha="center", va="bottom", fontsize=8)
+            ax2.text(0, padding, f"Dint = {inner_diameter_mm:.2f} mm", ha="center", va="bottom", fontsize=8)
 
         ax2.set_xlim(-max_radius - padding, max_radius + padding)
         ax2.set_ylim(-max_radius - padding, max_radius + padding)
+
+        if show:
+            plt.show()
 
         buf = io.BytesIO()
         fig.savefig(buf, format="png", dpi=300, bbox_inches="tight")
@@ -448,7 +483,7 @@ class ExtensionSpring(LinealSpring):
 
         return plot_data
 
-    def create_goodman_diagram(self):
+    def create_goodman_diagram(self, show=False):
         try:
             stress_max = self.get_stress_max()
             stress_min = self.get_stress_min()
@@ -461,6 +496,10 @@ class ExtensionSpring(LinealSpring):
             )
 
             analyzer = GoodmanAnalyzer(goodman_data, shot_peening=self.shot_peening)
+            if show:
+                analyzer.plot_diagram(stress_max, stress_min, show_plot=True)
+                return
+
             fig = analyzer.plot_diagram(stress_max, stress_min, show_plot=False)
 
             buf = io.BytesIO()

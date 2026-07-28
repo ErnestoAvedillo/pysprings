@@ -3,9 +3,6 @@ from pydantic import field_validator, ConfigDict
 from .constants import COMPRESSION_SPRING_END_TYPES, FORMING_TYPES
 from .goodman import Goodman
 import traceback
-from typing import Optional
-import matplotlib
-matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from matplotlib.patches import Circle
 import io
@@ -16,6 +13,9 @@ from .lineal import LinealSpring
 from pint import Quantity
 from ..pymodels.units import ureg
 from ..pymodels.positions import LinearPositionsTable
+from typing import Optional
+import matplotlib
+matplotlib.use('Agg')
 """Class for calculating a compression spring."""
 
 
