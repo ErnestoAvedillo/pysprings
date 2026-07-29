@@ -297,8 +297,8 @@ class TorsionSpring(WireCharacteristics):
     def set_pitch(self, pitch):
         """Set the torsion spring's pitch"""
         self.pitch = pitch
-        if self.pitch <= self.wire_diameter:
-            raise ValueError("The pitch must be a positive value")
+        if self.pitch < self.wire_diameter:
+            raise ValueError("The pitch must be a greater than the wire diameter")
         return self.pitch
 
     def set_free_angle(self, free_angle):
@@ -658,7 +658,7 @@ class TorsionSpring(WireCharacteristics):
         plt.close(fig)
         return plot_data
 
-    def get_spring_properties(self)-> dict:
+    def get_spring_data(self)-> dict:
         """Get a dictionary with all the torsion spring properties"""
         return {
             'material': self.material.material_name,
