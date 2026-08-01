@@ -15,6 +15,7 @@ from springcalc.pymodels.units import ureg
 from pydantic import ConfigDict, field_validator
 import matplotlib
 matplotlib.use('Agg')
+from .plotting import interactive_backend
 
 
 def _mag(v):
@@ -544,21 +545,22 @@ class TorsionSpring(WireCharacteristics):
         positions = [_to_deg_float(pc.position) for pc in positions_table]
         torques = [_to_torque_float(pc.load) for pc in positions_table]
 
-        plot = plt.figure()
-        plt.plot(positions, torques, marker='o')
-        plt.title('Torque vs Angular Position Curve')
-        plt.xlabel('Position (degrees)')
-        plt.ylabel('Torque (N*mm)')
-        plt.grid(True)
-        if show:
-            plt.show()
+        with interactive_backend(show):
+            plot = plt.figure()
+            plt.plot(positions, torques, marker='o')
+            plt.title('Torque vs Angular Position Curve')
+            plt.xlabel('Position (degrees)')
+            plt.ylabel('Torque (N*mm)')
+            plt.grid(True)
+            if show:
+                plt.show()
 
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        plot_data = base64.b64encode(buf.read()).decode()
-        buf.close()
-        plt.close(plot)
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close(plot)
         return plot_data
 
     def get_forces_vs_travel_graph(self, show=False):
@@ -576,21 +578,22 @@ class TorsionSpring(WireCharacteristics):
         travels = [_to_deg_float(pc.travel) for pc in positions_table]
         torques = [_to_torque_float(pc.load) for pc in positions_table]
 
-        plot = plt.figure()
-        plt.plot(travels, torques, marker='o')
-        plt.title('Torque vs Angular Travel Curve')
-        plt.xlabel('Travel (degrees)')
-        plt.ylabel('Torque (N*mm)')
-        plt.grid(True)
-        if show:
-            plt.show()
+        with interactive_backend(show):
+            plot = plt.figure()
+            plt.plot(travels, torques, marker='o')
+            plt.title('Torque vs Angular Travel Curve')
+            plt.xlabel('Travel (degrees)')
+            plt.ylabel('Torque (N*mm)')
+            plt.grid(True)
+            if show:
+                plt.show()
 
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        plot_data = base64.b64encode(buf.read()).decode()
-        buf.close()
-        plt.close(plot)
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close(plot)
         return plot_data
 
     def get_diameter_vs_position_graph(self, show=False):
@@ -613,49 +616,50 @@ class TorsionSpring(WireCharacteristics):
         outer_diameter_mm = _to_mm_float(outer_diameter)
         inner_diameter_mm = _to_mm_float(inner_diameter)
 
-        fig, (ax1, ax2) = plt.subplots(
-            1,
-            2,
-            figsize=(10, 4),
-            gridspec_kw={'width_ratios': [2, 1]}
-        )
+        with interactive_backend(show):
+            fig, (ax1, ax2) = plt.subplots(
+                1,
+                2,
+                figsize=(10, 4),
+                gridspec_kw={'width_ratios': [2, 1]}
+            )
 
-        ax1.plot(positions, diameters, marker='o', color='orange')
-        ax1.set_title('Outer Diameter vs Angular Position')
-        ax1.set_xlabel('Position (degrees)')
-        ax1.set_ylabel('Outer Diameter (mm)')
-        ax1.grid(True)
+            ax1.plot(positions, diameters, marker='o', color='orange')
+            ax1.set_title('Outer Diameter vs Angular Position')
+            ax1.set_xlabel('Position (degrees)')
+            ax1.set_ylabel('Outer Diameter (mm)')
+            ax1.grid(True)
 
-        ax2.set_aspect('equal')
-        ax2.axis('off')
+            ax2.set_aspect('equal')
+            ax2.axis('off')
 
-        outer_radius = outer_diameter_mm / 2.0
-        inner_radius = inner_diameter_mm / 2.0
-        max_radius = max(outer_radius, inner_radius, 1.0)
-        padding = max_radius * 0.25
+            outer_radius = outer_diameter_mm / 2.0
+            inner_radius = inner_diameter_mm / 2.0
+            max_radius = max(outer_radius, inner_radius, 1.0)
+            padding = max_radius * 0.25
 
-        ax2.add_patch(Circle((0, 0), outer_radius, fill=False, lw=2, color='tab:green'))
-        if inner_radius > 0:
-            ax2.add_patch(Circle((0, 0), inner_radius, fill=False, lw=2, color='tab:blue'))
+            ax2.add_patch(Circle((0, 0), outer_radius, fill=False, lw=2, color='tab:green'))
+            if inner_radius > 0:
+                ax2.add_patch(Circle((0, 0), inner_radius, fill=False, lw=2, color='tab:blue'))
 
-        ax2.plot([-outer_radius, outer_radius], [0, 0], color='tab:green', lw=1)
-        ax2.text(0, -padding, f"Dext = {outer_diameter_mm:.2f} mm", ha='center', va='top', fontsize=8)
+            ax2.plot([-outer_radius, outer_radius], [0, 0], color='tab:green', lw=1)
+            ax2.text(0, -padding, f"Dext = {outer_diameter_mm:.2f} mm", ha='center', va='top', fontsize=8)
 
-        if inner_radius > 0:
-            ax2.plot([0, 0], [-inner_radius, inner_radius], color='tab:blue', lw=1)
-            ax2.text(0, padding, f"Dint = {inner_diameter_mm:.2f} mm", ha='center', va='bottom', fontsize=8)
+            if inner_radius > 0:
+                ax2.plot([0, 0], [-inner_radius, inner_radius], color='tab:blue', lw=1)
+                ax2.text(0, padding, f"Dint = {inner_diameter_mm:.2f} mm", ha='center', va='bottom', fontsize=8)
 
-        ax2.set_xlim(-max_radius - padding, max_radius + padding)
-        ax2.set_ylim(-max_radius - padding, max_radius + padding)
-        if show:
-            plt.show()
+            ax2.set_xlim(-max_radius - padding, max_radius + padding)
+            ax2.set_ylim(-max_radius - padding, max_radius + padding)
+            if show:
+                plt.show()
 
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        plot_data = base64.b64encode(buf.read()).decode()
-        buf.close()
-        plt.close(fig)
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close(fig)
         return plot_data
 
     def get_spring_data(self)-> dict:

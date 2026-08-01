@@ -16,6 +16,7 @@ from ..pymodels.positions import LinearPositionsTable
 from typing import Optional
 import matplotlib
 matplotlib.use('Agg')
+from .plotting import interactive_backend
 """Class for calculating a compression spring."""
 
 
@@ -59,13 +60,27 @@ class CompressionSpring(LinealSpring):
                      inner_diameter: float = None,
                      nr_coils: float = None,
                      pitch: float = None,
-                     free_length: float = None):
+                     free_length: float = None,
+                     type_of_end: Optional[str] = 'closed_unground',
+                     type_conforming: Optional[str] = 'cold_formed'):
         """Set the spring's full geometry in one call.
+        Provide the general geometry parameters and characteristics of the spring
+        Computes and stores every derived spring property and calls calculate_spring_properties().
+        Parameters:
+        one of the following must be provided: mean_diameter, outer_diameter, inner_diameter
+            mean_diameter: mean diameter of the spring (mm)
+            outer_diameter: outer diameter of the spring (mm)
+            inner_diameter: inner diameter of the spring (mm)
+        two of the following must be provided: nr_coils, pitch, free_length
+            nr_coils: number of coils in the spring
+            pitch: pitch of the spring (mm)
+            free_length: free length of the spring (mm)
+        Optional parameters:
+            type_of_end: type of end of the spring ('open_ground','closed_ground','open_unground','closed_unground')
+            type_conforming: type of conforming of the spring ('cold_formed','hot_formed')
 
-        Provide exactly one of mean_diameter, outer_diameter, inner_diameter,
-        and exactly two of nr_coils, pitch, free_length. Computes and stores
-        every derived spring property, same as calling set_diameter() followed
-        by calculate_spring_properties().
+        Returns:
+        A dictionary with all the spring properties, including the derived ones.
         """
         diameters_provided = sum(1 for var in [mean_diameter, outer_diameter, inner_diameter] if var is not None)
         if diameters_provided != 1:
@@ -74,6 +89,11 @@ class CompressionSpring(LinealSpring):
         length_params_provided = sum(1 for var in [nr_coils, pitch, free_length] if var is not None)
         if length_params_provided != 2:
             raise ValueError("You must provide exactly two of the following variables: nr_coils, pitch, free_length")
+
+        if type_of_end is not None:
+            self.type_of_end = type_of_end
+        if type_conforming is not None:
+            self.type_conforming = type_conforming
 
         self.set_diameter(mean_diameter=mean_diameter,
                           outer_diameter=outer_diameter,
@@ -152,7 +172,7 @@ class CompressionSpring(LinealSpring):
     def add_load_position(self, length):
         """Add a load position to the positions table."""
         try:
-            if length < self.solid_length.magnitude:
+            if length < self.solid_length:
                 raise ValueError("The position cannot be smaller than the spring's solid length")
             load = self.calculate_load_at_position(length)
             stress = self.calculate_stress_at_position(load)
@@ -201,7 +221,8 @@ class CompressionSpring(LinealSpring):
             "solid_length": self.solid_length,
             "wire_length": self.wire_length,
             "number_cycles": self.number_cycles,
-            "shot_peening": self.shot_peening
+            "shot_peening": self.shot_peening,
+            "coating": self.coating
         }
 
     def get_data_positions(self):
@@ -222,22 +243,23 @@ class CompressionSpring(LinealSpring):
         positions_table = self.positions.positions
         positions = [_to_mm_float(pc.position) for pc in positions_table]
         loads = [_to_n_float(pc.load) for pc in positions_table]
-        plot = plt.figure()
-        plt.plot(positions, loads, marker='o')
-        plt.title('Load vs Position Curve')
-        plt.xlabel('Position (mm)')
-        plt.ylabel('Load (N)')
-        plt.grid(True)
-        if show:
-            plt.show()
+        with interactive_backend(show):
+            plot = plt.figure()
+            plt.plot(positions, loads, marker='o')
+            plt.title('Load vs Position Curve')
+            plt.xlabel('Position (mm)')
+            plt.ylabel('Load (N)')
+            plt.grid(True)
+            if show:
+                plt.show()
 
-        # Save the plot to a BytesIO object
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        plot_data = base64.b64encode(buf.read()).decode()
-        buf.close()
-        plt.close()
+            # Save the plot to a BytesIO object
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close()
 
         return plot_data
 
@@ -251,21 +273,22 @@ class CompressionSpring(LinealSpring):
         positions_table = self.positions.positions
         travels = [_to_mm_float(pc.travel) for pc in positions_table]
         loads = [_to_n_float(pc.load) for pc in positions_table]
-        plot = plt.figure()
-        plt.plot(travels, loads, marker='o')
-        plt.title('Load vs Travel Curve')
-        plt.xlabel('Travel (mm)')
-        plt.ylabel('Load (N)')
-        plt.grid(True)
-        # Save the plot to a BytesIO object
-        if show:
-            plt.show()
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        plot_data = base64.b64encode(buf.read()).decode()
-        buf.close()
-        plt.close()
+        with interactive_backend(show):
+            plot = plt.figure()
+            plt.plot(travels, loads, marker='o')
+            plt.title('Load vs Travel Curve')
+            plt.xlabel('Travel (mm)')
+            plt.ylabel('Load (N)')
+            plt.grid(True)
+            # Save the plot to a BytesIO object
+            if show:
+                plt.show()
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close()
 
         return plot_data
 
@@ -276,22 +299,23 @@ class CompressionSpring(LinealSpring):
         positions_table = self.positions.positions
         positions = [_to_mm_float(pc.position) for pc in positions_table]
         diameters = [_to_mm_float(pc.outer_diameter) for pc in positions_table]
-        plot = plt.figure()
-        plt.plot(positions, diameters, marker='o', color='orange')
-        plt.title('Outer Diameter vs Position')
-        plt.xlabel('Position (mm)')
-        plt.ylabel('Outer Diameter (mm)')
-        plt.grid(True)
-        if show:
-            plt.show()
+        with interactive_backend(show):
+            plot = plt.figure()
+            plt.plot(positions, diameters, marker='o', color='orange')
+            plt.title('Outer Diameter vs Position')
+            plt.xlabel('Position (mm)')
+            plt.ylabel('Outer Diameter (mm)')
+            plt.grid(True)
+            if show:
+                plt.show()
 
-        # Save the plot to a BytesIO object
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        plot_data = base64.b64encode(buf.read()).decode()
-        buf.close()
-        plt.close()
+            # Save the plot to a BytesIO object
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close()
 
         return plot_data
 
@@ -311,71 +335,72 @@ class CompressionSpring(LinealSpring):
         outer_diameter_mm = _to_mm_float(outer_diameter)
         inner_diameter_mm = _to_mm_float(inner_diameter)
 
-        fig, (ax1, ax2) = plt.subplots(
-            1,
-            2,
-            figsize=(10, 4),
-            gridspec_kw={"width_ratios": [2, 1]}
-        )
+        with interactive_backend(show):
+            fig, (ax1, ax2) = plt.subplots(
+                1,
+                2,
+                figsize=(10, 4),
+                gridspec_kw={"width_ratios": [2, 1]}
+            )
 
-        ax1.plot(positions, diameters, marker='o', color='orange')
-        ax1.set_title('Outer Diameter vs Position')
-        ax1.set_xlabel('Position (mm)')
-        ax1.set_ylabel('Outer Diameter (mm)')
-        ax1.grid(True)
+            ax1.plot(positions, diameters, marker='o', color='orange')
+            ax1.set_title('Outer Diameter vs Position')
+            ax1.set_xlabel('Position (mm)')
+            ax1.set_ylabel('Outer Diameter (mm)')
+            ax1.grid(True)
 
-        ax2.set_aspect('equal')
-        ax2.axis('off')
+            ax2.set_aspect('equal')
+            ax2.axis('off')
 
-        outer_radius = outer_diameter_mm / 2.0
-        inner_radius = inner_diameter_mm / 2.0
-        max_radius = max(outer_radius, inner_radius, 1.0)
-        padding = max_radius * 0.25
+            outer_radius = outer_diameter_mm / 2.0
+            inner_radius = inner_diameter_mm / 2.0
+            max_radius = max(outer_radius, inner_radius, 1.0)
+            padding = max_radius * 0.25
 
-        ax2.add_patch(Circle((0, 0),
-                             outer_radius,
-                             fill=False, lw=2,
-                             color='tab:green'))
-        if inner_radius > 0:
             ax2.add_patch(Circle((0, 0),
-                                 inner_radius,
-                                 fill=False,
-                                 lw=2,
-                                 color='tab:blue'))
+                                 outer_radius,
+                                 fill=False, lw=2,
+                                 color='tab:green'))
+            if inner_radius > 0:
+                ax2.add_patch(Circle((0, 0),
+                                     inner_radius,
+                                     fill=False,
+                                     lw=2,
+                                     color='tab:blue'))
 
-        ax2.plot([-outer_radius, outer_radius],
-                 [0, 0],
-                 color='tab:green',
-                 lw=1)
-        ax2.text(0,
-                 -padding,
-                 f"Dext = {outer_diameter_mm:.2f} mm",
-                 ha='center',
-                 va='top',
-                 fontsize=8)
-
-        if inner_radius > 0:
-            ax2.plot([0, 0],
-                     [-inner_radius, inner_radius],
-                     color='tab:blue',
+            ax2.plot([-outer_radius, outer_radius],
+                     [0, 0],
+                     color='tab:green',
                      lw=1)
             ax2.text(0,
-                     padding,
-                     f"Dint = {inner_diameter_mm:.2f} mm",
+                     -padding,
+                     f"Dext = {outer_diameter_mm:.2f} mm",
                      ha='center',
-                     va='bottom',
+                     va='top',
                      fontsize=8)
 
-        ax2.set_xlim(-max_radius - padding, max_radius + padding)
-        ax2.set_ylim(-max_radius - padding, max_radius + padding)
-        if show:
-            plt.show()
-        buf = io.BytesIO()
-        fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-        buf.seek(0)
-        plot_data = base64.b64encode(buf.read()).decode()
-        buf.close()
-        plt.close(fig)
+            if inner_radius > 0:
+                ax2.plot([0, 0],
+                         [-inner_radius, inner_radius],
+                         color='tab:blue',
+                         lw=1)
+                ax2.text(0,
+                         padding,
+                         f"Dint = {inner_diameter_mm:.2f} mm",
+                         ha='center',
+                         va='bottom',
+                         fontsize=8)
+
+            ax2.set_xlim(-max_radius - padding, max_radius + padding)
+            ax2.set_ylim(-max_radius - padding, max_radius + padding)
+            if show:
+                plt.show()
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close(fig)
 
         return plot_data
 

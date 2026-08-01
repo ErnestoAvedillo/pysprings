@@ -146,7 +146,7 @@ used by `ExtensionSpring`.
 | Method | Description |
 |---|---|
 | `CompressionSpring(material, wire_diameter, **data)` | Create the spring. |
-| `.set_geometry(mean_diameter=None, outer_diameter=None, inner_diameter=None, nr_coils=None, pitch=None, free_length=None)` | Set the full geometry in one call: exactly one diameter and exactly two of `nr_coils`/`pitch`/`free_length`. Equivalent to calling `.set_diameter()` followed by `.calculate_spring_properties()`. Returns `.get_spring_data()`. |
+| `.set_geometry(mean_diameter=None, outer_diameter=None, inner_diameter=None, nr_coils=None, pitch=None, free_length=None, type_of_end=None, type_conforming=None)` | Set the full geometry in one call: exactly one diameter and exactly two of `nr_coils`/`pitch`/`free_length`. `type_of_end` (one of `constants.COMPRESSION_SPRING_END_TYPES`, e.g. `"open_ground"`) and `type_conforming` (one of `constants.FORMING_TYPES`, e.g. `"cold_formed"`) are optional and, if given, override the spring's defaults before the active-coil count is computed. Equivalent to calling `.set_diameter()` followed by `.calculate_spring_properties()`. Returns `.get_spring_data()`. |
 | `.set_diameter(mean_diameter=None, outer_diameter=None, inner_diameter=None)` | Set exactly one of the three diameters; derives the others and the spring index/Wahl factor. |
 | `.calculate_spring_properties(nr_coils=None, pitch=None, free_length=None)` | Provide exactly two of the three; computes coils, active coils, Wahl factor, spring constant, solid length, and wire length. |
 | `.add_load_position(length)` | Record the load/stress/outer-diameter at a given compressed length, for the load-position table and fatigue analysis. |
@@ -375,8 +375,10 @@ with the closed-form `CompressionSpring` results.
 |---|---|
 | `CompressionSpringGeneral(material, wire_diameter, **data)` | Create the spring. Set `.mean_diameter_init`, `.pitch_constant`, and `.free_length` for a constant-geometry spring, or... |
 | `.establish_geometrical_function(func_D, func_p)` | ...inject custom functions `h -> mean_diameter` and `h -> pitch` (both `Quantity -> Quantity`) for a true variable-geometry spring. |
+| `.set_geometry(func_D, func_p, free_length=None, type_of_end=None, type_conforming=None)` | One-call setup: calls `.establish_geometrical_function(func_D, func_p)`, sets `.free_length`, and optionally `type_of_end` (one of `constants.COMPRESSION_SPRING_END_TYPES`, e.g. `"open_ground"`) and `type_conforming` (one of `constants.FORMING_TYPES`, e.g. `"cold_formed"`) — both default to the spring's current value when omitted. |
 | `.calculate_theta_max()` | Total helix rotation angle (rad) needed to reach `free_length`; also updates `.nr_coils`. |
-| `.calculate_spring_constant(num_points=500)` | Equivalent stiffness, integrating the local flexibility along the helix. |
+| `.calculate_active_coils()` | Number of active coils (`.nr_active_coils`), discounting the ground/squared end coils that don't deform, based on `type_of_end`/`type_conforming` — same formula as `CompressionSpring`. |
+| `.calculate_spring_constant(num_points=500)` | Equivalent stiffness, integrating the local flexibility along the helix over the active coils only (end coils excluded per `.calculate_active_coils()`). |
 | `.calculate_wire_length(num_points=500)` | Total wire length, integrating the 3D arc length along the helix. |
 | `.calculate_solid_length()` | Solid (fully compressed) length, accounting for coil telescoping/nesting when the diameter varies enough. |
 | `.simulate_progressive_compression(max_deflection, steps=100, num_points=500)` | Step-by-step compression simulation that detects coil-to-coil (oblique) contact; returns `(deflection, force, instantaneous_stiffness)` arrays. |
@@ -388,15 +390,20 @@ from springcalc.lineal.generic_compression import CompressionSpringGeneral
 
 material = Material(material_name="SH")
 spring = CompressionSpringGeneral(material=material, wire_diameter=2.0)
-spring.mean_diameter_init = 20 * ureg.mm
-spring.pitch_constant = 6 * ureg.mm
-spring.free_length = 60 * ureg.mm
+spring.set_geometry(
+    func_D=lambda h: 20 * ureg.mm,
+    func_p=lambda h: 6 * ureg.mm,
+    free_length=60 * ureg.mm,
+    type_of_end="open_ground",     # optional; this is the default
+    type_conforming="cold_formed", # optional; this is the default
+)
 
 spring.calculate_theta_max()
-print(spring.calculate_spring_constant())   # matches G*d^4/(8*D^3*n) for constant geometry
+print(spring.calculate_spring_constant())   # matches G*d^4/(8*D^3*n_active) for constant geometry
+print(spring.nr_active_coils)               # 7.7 (10 total coils minus the non-deforming ground ends)
 
 deflection, force, stiffness = spring.simulate_progressive_compression(max_deflection=20 * ureg.mm, steps=20)
-print(force[-1])   # ~40.75 N
+print(force[-1])   # ~52.92 N
 ```
 
 ## Tests

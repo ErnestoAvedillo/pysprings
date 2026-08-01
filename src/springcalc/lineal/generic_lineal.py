@@ -3,14 +3,14 @@ from pint import Quantity
 import numpy as np
 from pydantic import ConfigDict, field_validator
 from ..pymodels.units import ureg
-from .constants import WAHL_FACTOR_CONSTANTS, COMPRESSION_SPRING_END_TYPES
+from .constants import WAHL_FACTOR_CONSTANTS, COMPRESSION_SPRING_END_TYPES, FORMING_TYPES
 from ..pymodels.wire_characteristics import WireCharacteristics
 from typing import Optional
 from pint import Quantity
 from ..pymodels.units import ureg
 from pydantic import field_validator, ConfigDict
 import numpy as np
-from scipy.integrate import quad
+from scipy.integrate import quad, cumulative_trapezoid
 from scipy.optimize import fsolve
 
 # (Keep your other imports: ureg, WireCharacteristics, Material, etc.)
@@ -37,8 +37,8 @@ class VariableLinealSpring(WireCharacteristics):
     mean_diameter_init: Quantity = 0.0 * ureg.mm
     pitch_constant: Quantity = 0.0 * ureg.mm
     wire_length: Quantity = 0.0 * ureg.mm
-    type_of_end: str = "ground"
-    type_conforming: str = "cold"
+    type_of_end: str = COMPRESSION_SPRING_END_TYPES[1]  # open_ground by default
+    type_conforming: str = FORMING_TYPES[1]  # cold_formed by default
     theta_max: float = 0.0  # Total helix rotation angle (radians)
 
     # --- Your validators stay the same (trimmed here for brevity) ---
@@ -54,14 +54,51 @@ class VariableLinealSpring(WireCharacteristics):
     def __init__(self, material, wire_diameter: float, **data):
         data.update({'material': material, 'wire_diameter': wire_diameter})
         super().__init__(**data)
-
+        """
+        Initialize the VariableLinealSpring with a material and wire diameter.
+        The geometry functions (f_mean_diameter and f_pitch) can be set later using set_geometry or establish_geometrical_function.
+        """
         # By default, if no custom functions are given, initialize as a constant linear spring
         if 'f_mean_diameter' not in data:
             self.f_mean_diameter = lambda h: self.mean_diameter_init
         if 'f_pitch' not in data:
             self.f_pitch = lambda h: self.pitch_constant
 
-    def establish_geometrical_function(self, func_D: Callable[[Quantity], Quantity], func_p: Callable[[Quantity], Quantity]):
+    def set_geometry(self,
+                     func_D: Callable[[Quantity], Quantity],
+                     func_p: Callable[[Quantity], Quantity],
+                     free_length: Quantity,
+                     type_of_end: Optional[str] = 'closed_unground',
+                     type_conforming: Optional[str] = 'cold_formed',
+                     ):
+        """Sets the initial geometry for a variable-diameter, variable-pitch spring.
+        Parameters:
+            func_D: function that takes height (h) and returns mean diameter at that height
+            func_p: function that takes height (h) and returns pitch at that height.
+            free_length: optional free length of the spring
+            type_of_end: optional end type (e.g., open, closed, ground)
+            type_conforming: optional forming type (e.g., cold formed, hot formed)"""
+        self.establish_geometrical_function(func_D, func_p)
+        self.free_length = free_length.to('mm')
+        self.free_length = free_length if free_length is not None else self.free_length
+        if type_of_end is not None:
+            self.type_of_end = type_of_end
+        if type_conforming is not None:
+            self.type_conforming = type_conforming
+
+        # Invalidate everything derived from the previous geometry, so the
+        # next calculation recomputes against func_D/func_p/free_length
+        # instead of silently reusing stale numbers from a prior call (e.g.
+        # if this spring instance is reconfigured and reused).
+        self.theta_max = 0.0
+        self.nr_coils = 0.0
+        self.nr_active_coils = 0.0
+        self.spring_constant = 0.0 * ureg.N / ureg.mm
+        self.wire_length = 0.0 * ureg.mm
+
+    def establish_geometrical_function(self,
+                                       func_D: Callable[[Quantity], Quantity],
+                                       func_p: Callable[[Quantity], Quantity]):
         """Allows injecting any variable geometry into the spring"""
         self.f_mean_diameter = func_D
         self.f_pitch = func_p
@@ -91,20 +128,23 @@ class VariableLinealSpring(WireCharacteristics):
         self.nr_coils = theta_max / (2 * np.pi)
         return self.theta_max
 
-    def get_h_theta_development(self, num_points=500):
+    def get_h_theta_development(self, num_points=500, theta_start=0.0 * ureg.rad, theta_end=None):
         """
-        Solves the correspondence between the angle theta and the height h.
+        Solves the correspondence between the angle theta and the height h,
+        over [theta_start, theta_end] (defaults to the full [0, theta_max] span).
         Returns numpy arrays in millimeters.
         """
         if self.theta_max == 0:
             self.calculate_theta_max()
+        if theta_end is None:
+            theta_end = self.theta_max
 
-        thetas = np.linspace(0, self.theta_max, num_points)
+        thetas = np.linspace(theta_start, theta_end, num_points)
         zs = np.zeros(num_points)
 
         # Numerically solve the cumulative integral for each angle
         for i, theta in enumerate(thetas):
-            if i == 0:
+            if i == 0 and theta_start == 0.0:
                 zs[i] = 0.0
                 continue
 
@@ -115,8 +155,10 @@ class VariableLinealSpring(WireCharacteristics):
                 val, _ = quad(lambda h: (2 * np.pi) / self.f_pitch(h * ureg.mm).to('mm').magnitude, 0, z_val)
                 return val - theta
 
-            # Find the root (initial guess = previous point)
-            zs[i] = fsolve(equation, zs[i-1])[0]
+            # Find the root (initial guess = previous point, or a proportional estimate for the first point)
+            H_val = self.free_length.to('mm').magnitude
+            guess = zs[i - 1] if i > 0 else H_val * theta / self.theta_max
+            zs[i] = fsolve(equation, guess)[0]
 
         return thetas, zs
 
@@ -149,12 +191,23 @@ class VariableLinealSpring(WireCharacteristics):
 
 
 
+    def _get_active_theta_range(self) -> tuple:
+        """
+        Angular range (radians) over which coils actively deform.
+        Defaults to the full winding; subclasses may narrow it to exclude
+        non-deforming end coils (e.g. ground/squared compression spring ends).
+        """
+        if self.theta_max == 0:
+            self.calculate_theta_max()
+        return 0.0, self.theta_max
+
     def calculate_spring_constant(self, num_points=500) -> Quantity:
         """
         Calculate the equivalent spring stiffness (K) considering the coils in series.
         1/K = integral_0^theta_max [ 8 * D(theta)^3 / (G * d^4 * 2*pi) ] dtheta
         """
-        thetas, zs = self.get_h_theta_development(num_points)
+        theta_start, theta_end = self._get_active_theta_range()
+        thetas, zs = self.get_h_theta_development(num_points, theta_start=theta_start, theta_end=theta_end)
         Ds = np.array([self.f_mean_diameter(z * ureg.mm).to('mm').magnitude for z in zs])
 
         d_val = self.wire_diameter.to('mm').magnitude
@@ -171,13 +224,49 @@ class VariableLinealSpring(WireCharacteristics):
         self.spring_constant = K_val * (ureg.N / ureg.mm)
         return self.spring_constant
 
+    def calculate_spring_properties(self, num_points: int = 500) -> dict:
+        """
+        Calculate all derived properties of the variable-geometry spring:
+        total helix angle, coil count, wire length, spring constant, and a
+        representative spring index evaluated at mid free length.
+        """
+        self.calculate_theta_max()
+        self.calculate_wire_length(num_points=num_points)
+        self.calculate_spring_constant(num_points=num_points)
+        self.spring_index = self.calculate_spring_index_local(self.free_length / 2)
+        return self.get_spring_data()
+
+    def get_spring_data(self) -> dict:
+        """Return a dictionary with the main spring data."""
+        return {
+            "material": self.material.material_name,
+            "wire_diameter": self.wire_diameter,
+            "free_length": self.free_length,
+            "nr_coils": self.nr_coils,
+            "spring_constant": self.spring_constant,
+            "spring_index": self.spring_index,
+            "wire_length": self.wire_length,
+            "theta_max": self.theta_max,
+            "shot_peening": self.shot_peening,
+            "coating": self.coating,
+        }
+
     def simulate_progressive_compression(self, max_deflection: Quantity, steps: int = 100, num_points: int = 500):
         """
         Simulates step-by-step compression accounting for oblique contact between coils.
         Returns the force vs. deflection curve and the evolution of the instantaneous stiffness.
+        Parameters:
+            max_deflection: maximum deflection to simulate (Quantity)
+            steps: number of discrete deflection steps to simulate
+            num_points: number of discretization points along the spring for calculations
+        Returns:
+            deflection_history: numpy array of deflections (mm)
+            force_history: numpy array of forces (N)
+            stiffness_history: numpy array of instantaneous stiffness (N/mm)
         """
         # 1. Get the initial free-state (unloaded) trajectory
-        thetas, zs_free = self.get_h_theta_development(num_points)
+        theta_start, theta_end = self._get_active_theta_range()
+        thetas, zs_free = self.get_h_theta_development(num_points, theta_start=theta_start, theta_end=theta_end)
         Ds = np.array([self.f_mean_diameter(z * ureg.mm).to('mm').magnitude for z in zs_free])
         radii = Ds / 2.0
 
@@ -253,11 +342,20 @@ class VariableLinealSpring(WireCharacteristics):
                 current_force += force_increment
 
                 # Distribute the differential deformation locally.
-                # The more flexible zones (larger diameter or active) deform more.
+                # Each point's displacement is the *cumulative* flexibility
+                # from the fixed base (theta_start) up to that point, not a
+                # flat per-point shift: a flat shift moves every point by the
+                # same amount, so the gap between two coils one turn apart
+                # never changes and no collision could ever be detected. The
+                # cumulative form makes every turn's gap close by the same
+                # amount when diameter (and thus flexibility) is uniform,
+                # matching a real spring's uniform per-turn wind-up under a
+                # constant torque, while still weighting by local flexibility
+                # where diameter varies.
                 if K_inst != float('inf'):
-                    # Local deformation proportional to the local flexibility
                     deformation_factor = active_local_flexibility / total_flex
-                    delta_y += deformation_factor * deflection_step
+                    cumulative_deformation = cumulative_trapezoid(deformation_factor, thetas, initial=0.0)
+                    delta_y += cumulative_deformation * deflection_step
 
             deflection_history.append(current_deflection)
             force_history.append(current_force)

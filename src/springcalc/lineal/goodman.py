@@ -10,6 +10,7 @@ import io
 import base64
 from pint import Quantity
 from ..pymodels.units import ureg
+from .plotting import interactive_backend
 
 class GoodmanData(BaseModel):
     """Data model for the Goodman diagram - validation and data only"""
@@ -122,36 +123,37 @@ class GoodmanAnalyzer:
         sigma_max = self._to_mpa_float(sigma_max)
         sigma_min = self._to_mpa_float(sigma_min)
 
-        fig, ax = plt.subplots(figsize=(10, 8))
+        with interactive_backend(show_plot):
+            fig, ax = plt.subplots(figsize=(10, 8))
 
-        # Goodman diagram coordinates
-        V1 = (self.Sse - self.Ssf) / (self.Ssu - self.Ssf) * self.Ssu
-        Sv1 = self.Ssu - (self.Ssu - V1) * (self.Ssu + self.Ssf) / self.Ssu
+            # Goodman diagram coordinates
+            V1 = (self.Sse - self.Ssf) / (self.Ssu - self.Ssf) * self.Ssu
+            Sv1 = self.Ssu - (self.Ssu - V1) * (self.Ssu + self.Ssf) / self.Ssu
 
-        # Diagram lines
-        goodman_x = [0, V1, self.Sse, V1, 0]
-        goodman_y = [self.Ssf, self.Sse, self.Sse, Sv1, -self.Ssf]
+            # Diagram lines
+            goodman_x = [0, V1, self.Sse, V1, 0]
+            goodman_y = [self.Ssf, self.Sse, self.Sse, Sv1, -self.Ssf]
 
-        ax.plot(goodman_x, goodman_y, 'b-', linewidth=2, label='Goodman envelope')
-        ax.fill(goodman_x, goodman_y, alpha=0.3, color='lightblue', label='Safe region')
+            ax.plot(goodman_x, goodman_y, 'b-', linewidth=2, label='Goodman envelope')
+            ax.fill(goodman_x, goodman_y, alpha=0.3, color='lightblue', label='Safe region')
 
-        # Operating point
-        mean_tension = (sigma_max + sigma_min) / 2
-        amplitude = (sigma_max - sigma_min) / 2
+            # Operating point
+            mean_tension = (sigma_max + sigma_min) / 2
+            amplitude = (sigma_max - sigma_min) / 2
 
-        ax.plot([mean_tension, mean_tension], [sigma_min, sigma_max],
-                'ro-', linewidth=2, markersize=8, label='Operating point')
-        ax.plot(mean_tension, mean_tension, 'go', markersize=10, label=f'σₘ={mean_tension:.1f}, σₐ={amplitude:.1f}')
+            ax.plot([mean_tension, mean_tension], [sigma_min, sigma_max],
+                    'ro-', linewidth=2, markersize=8, label='Operating point')
+            ax.plot(mean_tension, mean_tension, 'go', markersize=10, label=f'σₘ={mean_tension:.1f}, σₐ={amplitude:.1f}')
 
-        # Plot configuration
-        ax.set_title(f'Goodman Diagram - Material: {self.data.material.material_name}')
-        ax.set_xlabel('Mean Tension σₘ (MPa)')
-        ax.set_ylabel('Alternating Tension σₐ (MPa)')
-        ax.grid(True, alpha=0.3)
-        ax.legend()
+            # Plot configuration
+            ax.set_title(f'Goodman Diagram - Material: {self.data.material.material_name}')
+            ax.set_xlabel('Mean Tension σₘ (MPa)')
+            ax.set_ylabel('Alternating Tension σₐ (MPa)')
+            ax.grid(True, alpha=0.3)
+            ax.legend()
 
-        # Add technical info
-        info_text = f"""Goodman Factors:
+            # Add technical info
+            info_text = f"""Goodman Factors:
         Nr of cycles: {self.data.cycles:.1e}
         Correction factors
         kₐ = {self.k_a:.3f}
@@ -162,12 +164,12 @@ class GoodmanAnalyzer:
         Sf = {self.Ssf:.1f} MPa
         Security factor (Sf/Sa): {self.calculate_safety_factor(sigma_max, sigma_min):.2f}"""
 
-        ax.text(0.02, 0.98, info_text, transform=ax.transAxes,
-                verticalalignment='top', fontsize=9,
-                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+            ax.text(0.02, 0.98, info_text, transform=ax.transAxes,
+                    verticalalignment='top', fontsize=9,
+                    bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
 
-        if show_plot:
-            plt.show()
+            if show_plot:
+                plt.show()
 
         return fig
 
