@@ -1,6 +1,6 @@
 [project]
 name = "springcalc"
-version = "0.1.1"
+version = "0.1.2"
 description = "Spring calculation library: compression, extension, and torsion."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -58,9 +58,11 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 # src-layout: the importable package lives at src/springcalc.
-# All package data (CSV material tables, JSON regression coefficients) under it
-# is bundled automatically.
+# CSV material tables are bundled automatically. JSON files are matched by the
+# repo-wide *.json rule in .gitignore, so they must be force-included here even
+# though factor_f_coeffs.json is tracked in git.
 packages = ["src/springcalc"]
+artifacts = ["src/springcalc/regresiones/factor_f/factor_f_coeffs.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
