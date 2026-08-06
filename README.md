@@ -12,7 +12,8 @@ Visit the library in my guithub https://github.com/ErnestoAvedillo/springcalc  a
 
 ```
 src/springcalc/         Library package
-├── lineal/             Calculation engine (compression, extension, torsion, Goodman)
+├── lineal/             Calculation engine (compression, extension, torsion, Goodman,
+│                       3D visualization, progressive-compression animation)
 ├── pymodels/           Data models (pydantic): material, units, wire, positions
 ├── material/           Material and tolerance tables (CSV, package data)
 ├── regresiones/        Fitted models loaded at runtime
@@ -69,6 +70,7 @@ report.build("spring_report.pdf")
 - [Position tables](#position-tables) — `LinearPositionsTable`, `AngularPositionsTable`
 - [PDF reports](#pdf-reports) — `SpringPDFReport`
 - [Advanced: variable-geometry springs](#advanced-variable-geometry-springs) — `VariableLinealSpring`, `CompressionSpringGeneral`
+- [Animating progressive compression](#animating-progressive-compression) — `CompressionAnimator`
 
 All physical quantities are [`pint`](https://pint.readthedocs.io/) `Quantity`
 objects (a number with a unit, e.g. `20.0 millimeter`). Plain numbers passed
@@ -157,6 +159,7 @@ used by `ExtensionSpring`.
 | `.get_forces_vs_travel_graph(show=False)` | Load vs. travel (compression from free length) curve; returns a base64 PNG. |
 | `.get_diameter_graph(show=False)` | Outer diameter vs. position curve; returns a base64 PNG. |
 | `.get_diameter_vs_position_graph(show=False)` | Outer diameter curve plus a to-scale cross-section diagram; returns a base64 PNG. |
+| `.get_3d_plot(num_points=200, show=False, isometric=True)` | Renders the coiled wire geometry in 3D (constant mean diameter and pitch); returns a base64 PNG. Defaults to an orthographic isometric view, matching how spring drawings are conventionally presented. |
 | `.create_goodman_diagram(show=False)` | Runs the fatigue (Goodman) analysis from the recorded positions; returns `{"image", "analysis", "stresses"}` or `{"error", "traceback"}`. |
 | `.get_stress_max()` / `.get_stress_min()` | Max/min stress across recorded positions (raises if none are recorded). |
 | `.get_load_max()` / `.get_load_min()` | Max/min load across recorded positions. |
@@ -344,13 +347,14 @@ for position in spring.get_data_positions():
 ### PDF reports
 
 `SpringPDFReport` (`springcalc.report.SpringPDFReport`, also exported as
-`springcalc.SpringPDFReport`) renders a `CompressionSpring`'s data, curves,
-and Goodman diagram into a printable PDF using `reportlab`.
+`springcalc.SpringPDFReport`) renders a `CompressionSpring`'s data, a 3D
+isometric view, curves, and the Goodman diagram into a printable PDF using
+`reportlab`.
 
 | Method | Description |
 |---|---|
 | `SpringPDFReport(spring, title=None)` | Wrap a `CompressionSpring` (with load positions already added via `add_load_position`, for the fullest report). |
-| `.build(output_path)` | Render the report and write it to `output_path`. Returns the path. Degrades gracefully (with a placeholder message) if a graph or the Goodman analysis can't be generated, e.g. no load positions recorded yet. |
+| `.build(output_path)` | Render the report and write it to `output_path`. Returns the path. Includes the spring data table, a 3D isometric view (from `spring.get_3d_plot()`), the load/geometry curves, the load-position table, and the Goodman diagram. Degrades gracefully (with a placeholder message) if a graph or the Goodman analysis can't be generated, e.g. no load positions recorded yet. |
 
 ```python
 from springcalc.report import SpringPDFReport
@@ -381,7 +385,8 @@ with the closed-form `CompressionSpring` results.
 | `.calculate_spring_constant(num_points=500)` | Equivalent stiffness, integrating the local flexibility along the helix over the active coils only (end coils excluded per `.calculate_active_coils()`). |
 | `.calculate_wire_length(num_points=500)` | Total wire length, integrating the 3D arc length along the helix. |
 | `.calculate_solid_length()` | Solid (fully compressed) length, accounting for coil telescoping/nesting when the diameter varies enough. |
-| `.simulate_progressive_compression(max_deflection, steps=100, num_points=500)` | Step-by-step compression simulation that detects coil-to-coil (oblique) contact; returns `(deflection, force, instantaneous_stiffness)` arrays. |
+| `.get_3d_plot(num_points=500, show=False, isometric=True)` | Renders the helix centerline in 3D, following the actual `f_mean_diameter`/`f_pitch` functions (so variable geometries show up as a non-uniform helix); returns a base64 PNG. Defaults to an orthographic isometric view. |
+| `.simulate_progressive_compression(max_deflection, steps=100, num_points=500, capture_geometry=False)` | Step-by-step compression simulation that detects coil-to-coil (oblique) contact; returns `(deflection, force, instantaneous_stiffness)` arrays. With `capture_geometry=True`, also returns a 4th value: `{"thetas", "z_history"}`, the instantaneous coil shape at every step (used by `CompressionAnimator`, see [below](#animating-progressive-compression)). |
 
 ```python
 from springcalc import Material
@@ -404,6 +409,34 @@ print(spring.nr_active_coils)               # 7.7 (10 total coils minus the non-
 
 deflection, force, stiffness = spring.simulate_progressive_compression(max_deflection=20 * ureg.mm, steps=20)
 print(force[-1])   # ~52.92 N
+```
+
+### Animating progressive compression
+
+`CompressionAnimator` (`springcalc.lineal.animation.CompressionAnimator`) renders
+`simulate_progressive_compression`'s result as an animated GIF of the coils
+closing up under load, reusing the same helix geometry as `get_3d_plot`. It
+takes any `VariableLinealSpring` (e.g. `CompressionSpringGeneral`). Saving is
+done with matplotlib's `PillowWriter`, so no extra system dependency (like
+`ffmpeg`) is required.
+
+| Method | Description |
+|---|---|
+| `CompressionAnimator(spring)` | Wrap a `CompressionSpringGeneral` (or other `VariableLinealSpring`) instance. |
+| `.create_gif(max_deflection, output_path="compression.gif", steps=60, num_points=300, fps=12, isometric=True)` | Runs `simulate_progressive_compression(capture_geometry=True)` internally and writes the resulting animation to `output_path`. Returns `output_path`. Axis limits are fixed from the free-state geometry so the camera doesn't jump between frames. |
+
+```python
+from springcalc import Material
+from springcalc.pymodels.units import ureg
+from springcalc.lineal.generic_compression import CompressionSpringGeneral
+from springcalc.lineal.animation import CompressionAnimator
+
+material = Material(material_name="SH")
+spring = CompressionSpringGeneral(material=material, wire_diameter=2.0)
+spring.set_geometry(func_D=lambda h: 20 * ureg.mm, func_p=lambda h: 6 * ureg.mm, free_length=60 * ureg.mm)
+
+animator = CompressionAnimator(spring)
+animator.create_gif(max_deflection=25 * ureg.mm, output_path="compression.gif")
 ```
 
 ## Tests

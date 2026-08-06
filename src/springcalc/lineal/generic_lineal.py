@@ -139,26 +139,46 @@ class VariableLinealSpring(WireCharacteristics):
         if theta_end is None:
             theta_end = self.theta_max
 
+        # theta_start/theta_end may arrive as a plain float (radians) or as a pint
+        # Quantity (e.g. the default 0.0 * ureg.rad), depending on the caller. Normalize
+        # both to plain float radians up front so every theta value used below is the
+        # same type as `val` (the quad result, already stripped to a magnitude) --
+        # otherwise `val - theta_delta` can end up subtracting a bare float from a
+        # Quantity, which is dimensionally inconsistent and can hand fsolve a Quantity
+        # residual instead of a float.
+        if isinstance(theta_start, Quantity):
+            theta_start = theta_start.to('rad').magnitude
+        if isinstance(theta_end, Quantity):
+            theta_end = theta_end.to('rad').magnitude
+
         thetas = np.linspace(theta_start, theta_end, num_points)
         zs = np.zeros(num_points)
 
-        # Numerically solve the cumulative integral for each angle
+        # Numerically solve the cumulative integral for each angle. Each step integrates
+        # only over [zs[i-1], z_test]
         for i, theta in enumerate(thetas):
             if i == 0 and theta_start == 0.0:
                 zs[i] = 0.0
                 continue
 
+            z_prev = zs[i - 1] if i > 0 else 0.0
+            theta_prev = thetas[i - 1] if i > 0 else 0.0
+            theta_delta = theta - theta_prev
+            H_val = self.free_length.to('mm').magnitude
+
             def equation(z_test):
                 # fsolve passes z_test as a 1-element array; quad's bounds need a plain scalar.
-                z_val = float(np.atleast_1d(z_test)[0])
-                # Integral from 0 to z_test of (2*pi / p(h)) dh
-                val, _ = quad(lambda h: (2 * np.pi) / self.f_pitch(h * ureg.mm).to('mm').magnitude, 0, z_val)
-                return val - theta
+                # fsolve is unconstrained and can probe (or converge to) z values that
+                # overshoot [0, H_val] by a float-tolerance sliver, which f_pitch/f_mean_diameter
+                # implementations may legitimately reject as out of the physical domain.
+                z_val = min(max(float(np.atleast_1d(z_test)[0]), 0.0), H_val)
+                # Integral from z_prev to z_test of (2*pi / p(h)) dh
+                val, _ = quad(lambda h: (2 * np.pi) / self.f_pitch(h * ureg.mm).to('mm').magnitude, z_prev, z_val)
+                return val - theta_delta
 
             # Find the root (initial guess = previous point, or a proportional estimate for the first point)
-            H_val = self.free_length.to('mm').magnitude
             guess = zs[i - 1] if i > 0 else H_val * theta / self.theta_max
-            zs[i] = fsolve(equation, guess)[0]
+            zs[i] = min(max(fsolve(equation, guess)[0], 0.0), H_val)
 
         return thetas, zs
 
@@ -251,7 +271,8 @@ class VariableLinealSpring(WireCharacteristics):
             "coating": self.coating,
         }
 
-    def simulate_progressive_compression(self, max_deflection: Quantity, steps: int = 100, num_points: int = 500):
+    def simulate_progressive_compression(self, max_deflection: Quantity, steps: int = 100, num_points: int = 500,
+                                          capture_geometry: bool = False):
         """
         Simulates step-by-step compression accounting for oblique contact between coils.
         Returns the force vs. deflection curve and the evolution of the instantaneous stiffness.
@@ -259,10 +280,18 @@ class VariableLinealSpring(WireCharacteristics):
             max_deflection: maximum deflection to simulate (Quantity)
             steps: number of discrete deflection steps to simulate
             num_points: number of discretization points along the spring for calculations
+            capture_geometry: if True, also record the instantaneous height (z) of every
+                discretization point at each step (needed to animate the coil closing up).
+                Off by default since it's only needed for that use case.
         Returns:
             deflection_history: numpy array of deflections (mm)
             force_history: numpy array of forces (N)
             stiffness_history: numpy array of instantaneous stiffness (N/mm)
+            geometry: only when capture_geometry=True, a dict {"thetas": ndarray,
+                "z_history": list of ndarrays, one per recorded step} describing the
+                coil shape (in mm) at every step. Radii per point stay constant across
+                steps since f_mean_diameter is evaluated at each point's free-state
+                (undeformed) position, not its instantaneous height.
         """
         # 1. Get the initial free-state (unloaded) trajectory
         theta_start, theta_end = self._get_active_theta_range()
@@ -277,6 +306,7 @@ class VariableLinealSpring(WireCharacteristics):
         deflection_history = []
         force_history = []
         stiffness_history = []
+        z_history = [] if capture_geometry else None
 
         # Angular step for one full turn (to compare adjacent coils)
         # Find how many discretization points equal 2*pi radians
@@ -360,10 +390,18 @@ class VariableLinealSpring(WireCharacteristics):
             deflection_history.append(current_deflection)
             force_history.append(current_force)
             stiffness_history.append(K_inst)
+            if capture_geometry:
+                z_history.append(zs_free - delta_y)
 
             if K_inst == float('inf'):
                 # If the spring is fully locked, end the simulation
                 break
+
+        if capture_geometry:
+            return (np.array(deflection_history) * ureg.mm,
+                    np.array(force_history) * ureg.N,
+                    np.array(stiffness_history) * (ureg.N / ureg.mm),
+                    {"thetas": thetas, "z_history": z_history})
 
         return (np.array(deflection_history) * ureg.mm,
                 np.array(force_history) * ureg.N,

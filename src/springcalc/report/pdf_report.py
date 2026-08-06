@@ -159,6 +159,18 @@ class SpringPDFReport:
             Spacer(1, 6 * mm),
         ]
 
+    def _build_3d_section(self):
+        elements = [Paragraph("3D isometric view", self._section_style)]
+        try:
+            image_b64 = self.spring.get_3d_plot(show=False)
+        except Exception as exc:
+            elements.append(Paragraph(
+                f"3D view could not be generated ({exc})", self.styles["Normal"]))
+            return elements
+        elements.append(self._b64_to_image(image_b64, width=120 * mm))
+        elements.append(Spacer(1, 6 * mm))
+        return elements
+
     def _build_graphs(self):
         elements = [Paragraph("Load and geometry curves", self._section_style)]
         graph_calls = [
@@ -218,6 +230,7 @@ class SpringPDFReport:
         story = []
         story += self._build_header()
         story += self._build_data_table()
+        story += self._build_3d_section()
         story.append(PageBreak())
         story += self._build_graphs()
         story.append(PageBreak())

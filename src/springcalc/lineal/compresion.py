@@ -404,6 +404,46 @@ class CompressionSpring(LinealSpring):
 
         return plot_data
 
+    def get_3d_plot(self, num_points: int = 200, show: bool = False, isometric: bool = True) -> str:
+        """Render the spring's helical geometry in 3D (constant mean diameter and pitch).
+
+        Returns a base64-encoded PNG (same convention as the other graph methods).
+        Defaults to an orthographic isometric view, matching how spring drawings
+        are conventionally presented.
+        """
+        theta_max = 2 * np.pi * self.nr_coils
+        thetas = np.linspace(0, theta_max, num_points)
+        radius = float(self.mean_diameter.to('mm').magnitude) / 2.0
+        pitch_mm = float(self.pitch.to('mm').magnitude)
+
+        xs = radius * np.cos(thetas)
+        ys = radius * np.sin(thetas)
+        zs = pitch_mm * thetas / (2 * np.pi)
+
+        with interactive_backend(show):
+            fig = plt.figure()
+            ax = fig.add_subplot(projection='3d')
+            ax.plot(xs, ys, zs)
+            ax.set_xlabel('X (mm)')
+            ax.set_ylabel('Y (mm)')
+            ax.set_zlabel('Z (mm)')
+            ax.set_title('Spring 3D Model')
+            ax.set_box_aspect((np.ptp(xs), np.ptp(ys), np.ptp(zs)))
+            if isometric:
+                ax.set_proj_type('ortho')
+                ax.view_init(elev=35.264, azim=45)
+            if show:
+                plt.show()
+
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close(fig)
+
+        return plot_data
+
     def create_goodman_diagram(self, show=False):
         """Generate the Goodman diagram and return a dictionary containing the
         base64 image, analysis, and calculated stresses. If it fails, return a

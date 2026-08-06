@@ -2,6 +2,7 @@ from math import pi
 from typing import Optional
 import io
 import base64
+import numpy as np
 from pint import Quantity
 import matplotlib
 matplotlib.use('Agg')
@@ -195,6 +196,46 @@ class CompressionSpringGeneral(VariableLinealSpring):
             plt.xlabel('Deflection (mm)')
             plt.ylabel('Force (N)')
             plt.grid(True)
+            if show:
+                plt.show()
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close()
+
+        return plot_data
+
+    def get_3d_plot(self, num_points: int = 500, show: bool = False, isometric: bool = True) -> str:
+        """Render the spring's helical centerline in 3D.
+
+        Reuses the same (theta, z, diameter) development as calculate_wire_length,
+        so variable diameter/pitch geometries show up as a non-uniform helix.
+        Returns a base64-encoded PNG (same convention as the other graph methods).
+        Defaults to an orthographic isometric view, matching how spring drawings
+        are conventionally presented.
+        """
+        thetas, zs = self.get_h_theta_development(num_points)
+        Ds = np.array([self.f_mean_diameter(z * ureg.mm).to('mm').magnitude for z in zs])
+        radii = Ds / 2.0
+
+        xs = radii * np.cos(thetas)
+        ys = radii * np.sin(thetas)
+
+        with interactive_backend(show):
+            fig = plt.figure()
+            ax = fig.add_subplot(projection='3d')
+            ax.plot(xs, ys, zs)
+            ax.set_xlabel('X (mm)')
+            ax.set_ylabel('Y (mm)')
+            ax.set_zlabel('Z (mm)')
+            ax.set_title('Spring 3D Model')
+            ax.set_box_aspect((np.ptp(xs), np.ptp(ys), np.ptp(zs)))
+            if isometric:
+                ax.set_proj_type('ortho')
+                ax.view_init(elev=35.264, azim=45)
             if show:
                 plt.show()
 
