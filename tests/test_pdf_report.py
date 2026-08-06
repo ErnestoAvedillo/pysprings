@@ -3,6 +3,7 @@ from pathlib import Path
 
 from springcalc.pymodels.material import Material
 from springcalc.lineal.compresion import CompressionSpring
+from springcalc.lineal.torsion import TorsionSpring
 from springcalc.report import SpringPDFReport
 
 
@@ -57,6 +58,27 @@ def test_goodman_diagram_without_positions():
     assert "no load positions" in result["error"].lower()
 
 
+def test_pdf_report_torsional_spring(tmp_path: Path):
+    material = Material(material_name="SL")
+    spring = TorsionSpring(material=material, wire_diameter=2.5)
+    spring.set_geometry(mean_diameter=30,
+                        nr_coils=5,
+                        pitch=3,
+                        free_angle=90,
+                        fixed_leg_radius=60,
+                        mobile_leg_radius=80)
+    spring.calculate_spring_properties()
+    for pos in [30, 40, 50, 60, 70, 80, 90]:
+        spring.add_load_position(length=pos)
+
+    report = SpringPDFReport(spring, title="Torsional Spring Report")
+    output_path = str(tmp_path / "torsional_spring_report.pdf")
+    report.build(output_path)
+
+    assert os.path.exists(output_path)
+
+
 if __name__ == "__main__":
     test_pdf_report_generates_file(tmp_path=Path("."))
     test_pdf_report_without_positions(tmp_path=Path("."))
+    test_pdf_report_torsional_spring(tmp_path=Path("."))

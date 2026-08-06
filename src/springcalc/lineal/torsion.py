@@ -2,6 +2,7 @@
 from math import pi
 import io
 import base64
+import traceback
 import numpy as np
 from math import atan
 from matplotlib import pyplot as plt
@@ -14,8 +15,9 @@ from pint import Quantity
 from springcalc.pymodels.units import ureg
 from pydantic import ConfigDict, field_validator
 import matplotlib
-matplotlib.use('Agg')
+from .goodman import GoodmanData, GoodmanAnalyzer
 from .plotting import interactive_backend
+matplotlib.use('Agg')
 
 
 def _mag(v):
@@ -100,13 +102,13 @@ class TorsionSpring(WireCharacteristics):
                 else:
                     quantity = ureg(v).to('degree')
                 if quantity.magnitude < 0:
-                    quantity =  360 * ureg.degree + quantity
+                    quantity = 360 * ureg.degree + quantity
                 return quantity
             except Exception as e:
                 raise ValueError(f'Error validating angle: {e}')
         return quantity
 
-    @field_validator('spring_constant',mode='before')
+    @field_validator('spring_constant', mode='before')
     @classmethod
     def validate_positive_spring_constant(cls, v):
         """Validate that the spring constant is positive"""
@@ -127,7 +129,7 @@ class TorsionSpring(WireCharacteristics):
 
     @field_validator('resisting_moment', mode='before')
     @classmethod
-    def validate_positive_sptring_constant(cls,v):
+    def validate_positive_resisting_moment(cls, v):
         """Validate the resisting moment"""
         if v is not None:
             try:
@@ -238,6 +240,7 @@ class TorsionSpring(WireCharacteristics):
         if wire_diameter is None:
             raise ValueError("""You must provide the wire diameter to
                             set the material""")
+
     def set_diameter(
             self,
             outer_diameter: float = None,
@@ -254,7 +257,7 @@ class TorsionSpring(WireCharacteristics):
             self.set_mean_diameter(mean_diameter)
         else:
             mean_diameter = self.calculate_mean_diameter(outer_diameter,
-                                                          inner_diameter)
+                                                         inner_diameter)
             self.set_mean_diameter(mean_diameter)
 
     def calculate_mean_diameter(self, outer_diameter=None, inner_diameter=None):
@@ -278,7 +281,7 @@ class TorsionSpring(WireCharacteristics):
             mean_diameter = outer_diameter - self.wire_diameter.magnitude
         self.set_mean_diameter(mean_diameter)
         return self.mean_diameter
-    
+
     def set_mean_diameter(self, mean_diameter):
         """Set the torsion spring's mean diameter"""
         if _mag(mean_diameter) <= 0:
@@ -359,16 +362,16 @@ class TorsionSpring(WireCharacteristics):
         self.pitch = pitch
         self.spring_width = (self.nr_coils + self.free_angle / 2 / pi) * self.pitch
         self.nr_active_coils = (self.nr_coils +
-                                      self.free_angle / 2 / pi)
+                                self.free_angle / 2 / pi)
 
         return self.spring_width
 
     def set_wire_length(self,
-                          nr_coils: int,
-                          pitch: float,
-                          tangency_angle: float,
-                          fixed_leg_radius: float,
-                          mobile_leg_radius: float):
+                        nr_coils: int,
+                        pitch: float,
+                        tangency_angle: float,
+                        fixed_leg_radius: float,
+                        mobile_leg_radius: float):
         """Calculate the torsion spring's wire length"""
         parameters_provided = [nr_coils,
                                pitch,
@@ -388,18 +391,18 @@ class TorsionSpring(WireCharacteristics):
         self.fixed_leg_radius = fixed_leg_radius
         self.mobile_leg_radius = mobile_leg_radius
         single_turn_length = np.sqrt((pi * self.mean_diameter) ** 2 +
-                                   (self.pitch / (2 * pi)) ** 2)
+                                     (self.pitch / (2 * pi)) ** 2)
         self.body_wire_length = ((self.nr_coils + self.tangency_angle / 2 / pi) *
-                                     single_turn_length)
+                                 single_turn_length)
         self.calculate_length_legs(self.fixed_leg_radius, self.mobile_leg_radius)
         self.wire_length_total = (self.body_wire_length +
-                                    self.fixed_leg_length + self.mobile_leg_length)
+                                  self.fixed_leg_length + self.mobile_leg_length)
         return self.wire_length_total
 
     def set_tangency_angle(self,
-                              free_angle,
-                              fixed_leg_radius,
-                              mobile_leg_radius):
+                           free_angle,
+                           fixed_leg_radius,
+                           mobile_leg_radius):
         """Calculate the torsion spring's tangency angle"""
         parameters_provided = [free_angle,
                                fixed_leg_radius,
@@ -411,8 +414,8 @@ class TorsionSpring(WireCharacteristics):
         self.fixed_leg_radius = fixed_leg_radius
         self.mobile_leg_radius = mobile_leg_radius
         zero_equivalent_angle = (2 * pi -
-                                   atan(self.fixed_leg_radius / self.mean_diameter) -
-                                   atan(self.mobile_leg_radius / self.mean_diameter))
+                                 atan(self.fixed_leg_radius / self.mean_diameter) -
+                                 atan(self.mobile_leg_radius / self.mean_diameter))
         if self.free_angle + zero_equivalent_angle > 2 * pi:
             self.tangency_angle = zero_equivalent_angle + self.free_angle - 2 * pi
         else:
@@ -449,8 +452,8 @@ class TorsionSpring(WireCharacteristics):
         if _mag(self.resisting_moment) <= 0:
             self.set_resisting_moment()
         self.spring_constant = (self.material.young_modulus *
-                                 self.resisting_moment /
-                                 self.wire_length_total)
+                                self.resisting_moment /
+                                self.wire_length_total)
         return self.spring_constant
 
     def calculate_torque(self, rotation_angle):
@@ -475,7 +478,7 @@ class TorsionSpring(WireCharacteristics):
             raise ValueError("The torque must be a positive value to \
             calculate the stress")
         stress = ((32 * torque * self.wahl_factor) /
-                   (pi * np.pow(self.mean_diameter, 3)))
+                  (pi * np.pow(self.wire_diameter, 3)))
         return stress
 
     def add_position(self, angle_travel=None, torque=None):
@@ -501,16 +504,126 @@ class TorsionSpring(WireCharacteristics):
         self.angle_position = self.free_angle - self.angle_travel
         new_tangency_angle = self.tangency_angle + self.angle_travel
         new_mean_diameter = (4 * (self.body_wire_length ** 2 - self.pitch ** 2) /
-                                (2 * pi * self.nr_coils + new_tangency_angle) ** 2) ** 0.5
+                             (2 * pi * self.nr_coils + new_tangency_angle) ** 2) ** 0.5
         outer_diameter = new_mean_diameter + self.wire_diameter
         inner_diameter = new_mean_diameter - self.wire_diameter
         if not hasattr(self, 'positions'):
             self.positions = AngularPositionsTable()
         self.positions.add_load_position(self.angle_position,
-                                          self.angle_travel,
-                                          self.torque_position,
-                                          self.stress_position, outer_diameter, inner_diameter)
+                                         self.angle_travel,
+                                         self.torque_position,
+                                         self.stress_position, outer_diameter, inner_diameter)
         return self.positions
+
+    def add_load_position(self, length):
+        """Add a load position using an angular travel value (in degrees).
+
+        Mirrors ``CompressionSpring.add_load_position`` so both spring types
+        expose the same API for the PDF report.
+        """
+        return self.add_position(angle_travel=length)
+
+    def get_stress_max(self):
+        """Return the maximum stress among the recorded load positions."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
+        return max(self.positions.positions, key=lambda x: x.stress).stress
+
+    def get_stress_min(self):
+        """Return the minimum stress among the recorded load positions."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
+        return min(self.positions.positions, key=lambda x: x.stress).stress
+
+    def get_load_max(self):
+        """Return the maximum torque among the recorded load positions."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
+        return max(self.positions.positions, key=lambda x: x.load).load
+
+    def get_load_min(self):
+        """Return the minimum torque among the recorded load positions."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
+        return min(self.positions.positions, key=lambda x: x.load).load
+
+    def create_goodman_diagram(self, show=False):
+        """Generate the Goodman diagram for the torsion spring's wire, which is
+        loaded in bending. Returns a dictionary containing the base64 image,
+        analysis, and calculated stresses, or an 'error'/'traceback' pair."""
+        try:
+            if not self.positions.positions:
+                raise ValueError("No load positions available for Goodman analysis")
+
+            stress_max = self.get_stress_max()
+            stress_min = self.get_stress_min()
+
+            goodman_data = GoodmanData(
+                material=self.material,
+                diameter=self.wire_diameter,
+                load_type='flexion',
+                cycles=int(self.number_cycles)
+            )
+
+            analyzer = GoodmanAnalyzer(goodman_data, shot_peening=self.shot_peening)
+            if show:
+                analyzer.plot_diagram(sigma_max=stress_max, sigma_min=stress_min)
+                return
+
+            image_b64 = analyzer.get_diagram_image(sigma_max=stress_max, sigma_min=stress_min)
+            analysis = analyzer.get_analysis_summary(stress_max, stress_min)
+
+            return {
+                'image': image_b64,
+                'analysis': analysis,
+                'stresses': {
+                    'stress_max': round(stress_max, 2),
+                    'stress_min': round(stress_min, 2),
+                    'load_max': round(self.get_load_max(), 2),
+                    'load_min': round(self.get_load_min(), 2)
+                }
+            }
+        except Exception as e:
+            tb = traceback.format_exc()
+            print(f"Error creating Goodman diagram in TorsionSpring: {e}\n{tb}")
+            return {'error': str(e), 'traceback': tb}
+
+    def get_3d_plot(self, num_points: int = 200, show: bool = False, isometric: bool = True) -> str:
+        """Render the spring's helical body geometry in 3D (constant mean
+        diameter and pitch). Returns a base64-encoded PNG, matching the
+        convention used by the other graph methods."""
+        theta_max = 2 * np.pi * self.nr_coils
+        thetas = np.linspace(0, theta_max, num_points)
+        radius = float(self.mean_diameter.to('mm').magnitude) / 2.0
+        pitch_mm = float(self.pitch.to('mm').magnitude)
+
+        xs = radius * np.cos(thetas)
+        ys = radius * np.sin(thetas)
+        zs = pitch_mm * thetas / (2 * np.pi)
+
+        with interactive_backend(show):
+            fig = plt.figure()
+            ax = fig.add_subplot(projection='3d')
+            ax.plot(xs, ys, zs)
+            ax.set_xlabel('X (mm)')
+            ax.set_ylabel('Y (mm)')
+            ax.set_zlabel('Z (mm)')
+            ax.set_title('Spring 3D Model')
+            ax.set_box_aspect((np.ptp(xs), np.ptp(ys), np.ptp(zs)))
+            if isometric:
+                ax.set_proj_type('ortho')
+                ax.view_init(elev=35.264, azim=45)
+            if show:
+                plt.show()
+
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close(fig)
+
+        return plot_data
 
     def clean_positions(self):
         """Clear the positions list for fatigue analysis"""
@@ -662,7 +775,11 @@ class TorsionSpring(WireCharacteristics):
             plt.close(fig)
         return plot_data
 
-    def get_spring_data(self)-> dict:
+    def get_spring_properties(self) -> dict:
+        """Get a dictionary with all the torsion spring properties"""
+        return self.get_spring_data()
+
+    def get_spring_data(self) -> dict:
         """Get a dictionary with all the torsion spring properties"""
         return {
             'material': self.material.material_name,
