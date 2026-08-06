@@ -1563,7 +1563,7 @@ wheels = [
 
 [[package]]
 name = "springcalc"
-version = "0.1.9"
+version = "0.1.11"
 source = { editable = "." }
 dependencies = [
     { name = "build" },
