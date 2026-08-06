@@ -10,7 +10,7 @@ def _build_spring():
     material = Material(material_name="SL")
     spring = CompressionSpring(material=material, wire_diameter=2.5)
     spring.set_diameter(outer_diameter=30)
-    spring.calculate_spring_properties(nr_coils=None, pitch=20, free_length=100)
+    spring.calculate_spring_properties(nr_coils=None, pitch=10, free_length=100)
     for pos in [30, 40, 50, 60, 70, 80, 90, 100]:
         spring.add_load_position(length=pos)
     return spring
@@ -35,7 +35,7 @@ def test_pdf_report_without_positions(tmp_path: Path):
     material = Material(material_name="SL")
     spring = CompressionSpring(material=material, wire_diameter=2.5)
     spring.set_diameter(outer_diameter=30)
-    spring.calculate_spring_properties(nr_coils=None, pitch=20, free_length=100)
+    spring.calculate_spring_properties(nr_coils=None, pitch=10, free_length=100)
 
     report = SpringPDFReport(spring)
     output_path = str(tmp_path / "empty_report.pdf")

@@ -172,8 +172,10 @@ class CompressionSpring(LinealSpring):
         self.solid_length = self.nr_coils * self.wire_diameter
         return self.solid_length
 
-    def add_load_position(self, length):
+    def add_load_position(self, length: Quantity):
         """Add a load position to the positions table."""
+        if not isinstance(length, Quantity):
+            length = length * ureg.mm
         try:
             if length < self.solid_length:
                 raise ValueError("The position cannot be smaller than the spring's solid length")

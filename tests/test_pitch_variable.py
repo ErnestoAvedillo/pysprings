@@ -179,7 +179,7 @@ def test_progressive_pitch():
 
 
 if __name__ == "__main__":
-    # _build_constant_geometry_spring()
-    # test_theta_max_matches_coil_count()
-    # test_simulate_progressive_compression()
+    _build_constant_geometry_spring()
+    test_theta_max_matches_coil_count()
+    test_simulate_progressive_compression()
     test_progressive_pitch()
