@@ -123,6 +123,8 @@ def test_cuadratic_diameter():
     plot_data = spring.get_progressive_compression_graph(deflection, force, show=True)
     spring_data = spring.get_3d_plot(show=True)
     report = SpringPDFReport(spring=spring, title="Variable Diameter and Pitch Spring Report")
+    report.build(output_path="variable_diameter_pitch_spring_report.pdf")
+
 
 def test_linear_diameter():
     diameter_values = []
@@ -168,6 +170,8 @@ def test_linear_diameter():
     plot_data = spring.get_progressive_compression_graph(deflection, force, show=True)
     spring_data = spring.get_3d_plot(show=True)
     report = SpringPDFReport(spring=spring, title="Variable Diameter and Pitch Spring Report")
+    report.build(output_path="linear_diameter_pitch_spring_report.pdf")
+
 
 def test_progressive_compression_animation():
     """Render the coils closing up under progressive load as an animated GIF.
@@ -194,7 +198,17 @@ def test_progressive_compression_animation():
         max_deflection=40 * ureg.mm, output_path="progressive_compression.gif",
         steps=40, num_points=300, fps=12,
     )
+    positions = [120, 100]
+    for pos in positions:
+        spring.add_load_position(length=pos * ureg.mm)
     print(f"✅ Progressive compression animation written to {output_path}")
+    spring_data = spring.get_spring_data()
+    print(f"Data of the generic class:")
+    for key, value in spring_data.items():
+        print(f"{key}: {value}")
+    spring.get_3d_plot(show=True)
+    report = SpringPDFReport(spring=spring, title="Progressive Compression Animation Report")
+    report.build(output_path="progressive_compression_animation_report.pdf")
 
 
 if __name__ == "__main__":

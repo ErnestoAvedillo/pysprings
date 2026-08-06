@@ -2,15 +2,18 @@ from math import pi
 from typing import Optional
 import io
 import base64
+import traceback
 import numpy as np
 from pint import Quantity
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
+from matplotlib.patches import Circle
 from ..pymodels.units import ureg
 from .constants import WAHL_FACTOR_CONSTANTS, COMPRESSION_SPRING_END_TYPES, FORMING_TYPES
 from ..pymodels.positions import LinearPositionsTable
 from .generic_lineal import VariableLinealSpring
+from .goodman import GoodmanData, GoodmanAnalyzer
 from .plotting import interactive_backend
 
 COMPRESSION = 1
@@ -175,6 +178,226 @@ class CompressionSpringGeneral(VariableLinealSpring):
     def empty_tables(self):
         """Clear the positions table."""
         self.positions.clear_table()
+
+    def get_data_positions(self):
+        """Return the positions, loads, stresses, and outer diameters table."""
+        return self.positions.positions
+
+    def get_data_travels(self):
+        """Return the positions table for the travel curve."""
+        return self.positions.positions
+
+    def get_stress_max(self):
+        """Return the maximum spring stress."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
+        return max(self.positions.positions, key=lambda x: x.stress).stress
+
+    def get_stress_min(self):
+        """Return the minimum spring stress."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
+        return min(self.positions.positions, key=lambda x: x.stress).stress
+
+    def get_load_max(self):
+        """Return the maximum spring load."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
+        return max(self.positions.positions, key=lambda x: x.load).load
+
+    def get_load_min(self):
+        """Return the minimum spring load."""
+        if not self.positions.positions:
+            raise ValueError("No load positions available")
+        return min(self.positions.positions, key=lambda x: x.load).load
+
+    def create_goodman_diagram(self, show=False):
+        """Generate the Goodman diagram and return a dictionary containing the
+        base64 image, analysis, and calculated stresses. If it fails, return a
+        dictionary with the 'error' and 'traceback' keys."""
+        try:
+            if not self.positions.positions:
+                raise ValueError("No load positions available for Goodman analysis")
+
+            stress_max = self.get_stress_max()
+            stress_min = self.get_stress_min()
+
+            goodman_data = GoodmanData(
+                material=self.material,
+                diameter=self.wire_diameter,
+                load_type='torsion',
+                cycles=int(self.number_cycles)
+            )
+
+            analyzer = GoodmanAnalyzer(goodman_data,
+                                       shot_peening=self.shot_peening)
+            if show:
+                analyzer.plot_diagram(sigma_max=stress_max, sigma_min=stress_min)
+                return
+
+            image_b64 = analyzer.get_diagram_image(sigma_max=stress_max,
+                                                   sigma_min=stress_min)
+
+            analysis = analyzer.get_analysis_summary(stress_max, stress_min)
+
+            return {
+                'image': image_b64,
+                'analysis': analysis,
+                'stresses': {
+                    'stress_max': round(stress_max, 2),
+                    'stress_min': round(stress_min, 2),
+                    'load_max': round(self.get_load_max(), 2),
+                    'load_min': round(self.get_load_min(), 2)
+                }
+            }
+        except Exception as e:
+            tb = traceback.format_exc()
+            print(f"Error creating Goodman diagram in CompressionSpringGeneral: {e}\n{tb}")
+            return {'error': str(e), 'traceback': tb}
+
+    def get_forces_vs_position_graph(self, show=False):
+        def _to_mm_float(value):
+            return float(value.to('mm').magnitude) if isinstance(value, Quantity) else float(value)
+
+        def _to_n_float(value):
+            return float(value.to('N').magnitude) if isinstance(value, Quantity) else float(value)
+
+        positions_table = self.positions.positions
+        positions = [_to_mm_float(pc.position) for pc in positions_table]
+        loads = [_to_n_float(pc.load) for pc in positions_table]
+        with interactive_backend(show):
+            plt.figure()
+            plt.plot(positions, loads, marker='o')
+            plt.title('Load vs Position Curve')
+            plt.xlabel('Position (mm)')
+            plt.ylabel('Load (N)')
+            plt.grid(True)
+            if show:
+                plt.show()
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close()
+
+        return plot_data
+
+    def get_forces_vs_travel_graph(self, show=False):
+        def _to_mm_float(value):
+            return float(value.to('mm').magnitude) if isinstance(value, Quantity) else float(value)
+
+        def _to_n_float(value):
+            return float(value.to('N').magnitude) if isinstance(value, Quantity) else float(value)
+
+        positions_table = self.positions.positions
+        travels = [_to_mm_float(pc.travel) for pc in positions_table]
+        loads = [_to_n_float(pc.load) for pc in positions_table]
+        with interactive_backend(show):
+            plt.figure()
+            plt.plot(travels, loads, marker='o')
+            plt.title('Load vs Travel Curve')
+            plt.xlabel('Travel (mm)')
+            plt.ylabel('Load (N)')
+            plt.grid(True)
+            if show:
+                plt.show()
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close()
+
+        return plot_data
+
+    def get_diameter_vs_position_graph(self, show=False):
+        """Plot diameter versus position and add a circle diagram."""
+        def _to_mm_float(value):
+            if isinstance(value, Quantity):
+                return float(value.to('mm').magnitude)
+            return float(value)
+
+        positions_table = self.positions.positions
+        positions = [_to_mm_float(pc.position) for pc in positions_table]
+        diameters = [_to_mm_float(pc.outer_diameter) for pc in positions_table]
+
+        mid_diameter = self.f_mean_diameter(self.free_length / 2)
+        outer_diameter = mid_diameter + self.wire_diameter
+        inner_diameter = max(mid_diameter - self.wire_diameter, 0 * ureg.mm)
+        outer_diameter_mm = _to_mm_float(outer_diameter)
+        inner_diameter_mm = _to_mm_float(inner_diameter)
+
+        with interactive_backend(show):
+            fig, (ax1, ax2) = plt.subplots(
+                1,
+                2,
+                figsize=(10, 4),
+                gridspec_kw={"width_ratios": [2, 1]}
+            )
+
+            ax1.plot(positions, diameters, marker='o', color='orange')
+            ax1.set_title('Outer Diameter vs Position')
+            ax1.set_xlabel('Position (mm)')
+            ax1.set_ylabel('Outer Diameter (mm)')
+            ax1.grid(True)
+
+            ax2.set_aspect('equal')
+            ax2.axis('off')
+
+            outer_radius = outer_diameter_mm / 2.0
+            inner_radius = inner_diameter_mm / 2.0
+            max_radius = max(outer_radius, inner_radius, 1.0)
+            padding = max_radius * 0.25
+
+            ax2.add_patch(Circle((0, 0),
+                                 outer_radius,
+                                 fill=False, lw=2,
+                                 color='tab:green'))
+            if inner_radius > 0:
+                ax2.add_patch(Circle((0, 0),
+                                     inner_radius,
+                                     fill=False,
+                                     lw=2,
+                                     color='tab:blue'))
+
+            ax2.plot([-outer_radius, outer_radius],
+                     [0, 0],
+                     color='tab:green',
+                     lw=1)
+            ax2.text(0,
+                     -padding,
+                     f"Dext = {outer_diameter_mm:.2f} mm",
+                     ha='center',
+                     va='top',
+                     fontsize=8)
+
+            if inner_radius > 0:
+                ax2.plot([0, 0],
+                         [-inner_radius, inner_radius],
+                         color='tab:blue',
+                         lw=1)
+                ax2.text(0,
+                         padding,
+                         f"Dint = {inner_diameter_mm:.2f} mm",
+                         ha='center',
+                         va='bottom',
+                         fontsize=8)
+
+            ax2.set_xlim(-max_radius - padding, max_radius + padding)
+            ax2.set_ylim(-max_radius - padding, max_radius + padding)
+            if show:
+                plt.show()
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', dpi=300, bbox_inches='tight')
+            buf.seek(0)
+            plot_data = base64.b64encode(buf.read()).decode()
+            buf.close()
+            plt.close(fig)
+
+        return plot_data
 
     def get_progressive_compression_graph(self, deflection: Quantity, force: Quantity, show: bool = False) -> str:
         """Plot the deflection/force curve from simulate_progressive_compression.

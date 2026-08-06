@@ -5,12 +5,11 @@ simulate_progressive_compression's per-step geometry).
 import numpy as np
 from pint import Quantity
 import matplotlib
-matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation, PillowWriter
-
 from ..pymodels.units import ureg
 from .generic_lineal import VariableLinealSpring
+matplotlib.use('Agg')
 
 
 class CompressionAnimator:
@@ -25,15 +24,22 @@ class CompressionAnimator:
     def __init__(self, spring: VariableLinealSpring):
         self.spring = spring
 
-    def create_gif(self, max_deflection: Quantity, output_path: str = "compression.gif",
-                    steps: int = 60, num_points: int = 300, fps: int = 12,
-                    isometric: bool = True) -> str:
+    def create_gif(self,
+                   max_deflection: Quantity,
+                   output_path: str = "animation.gif",
+                   steps: int = 60,
+                   num_points: int = 300,
+                   fps: int = 12,
+                   isometric: bool = True) -> str:
         """Simulate progressive compression and render it as an animated GIF.
 
         Returns output_path.
         """
         deflection, force, _, geometry = self.spring.simulate_progressive_compression(
-            max_deflection=max_deflection, steps=steps, num_points=num_points, capture_geometry=True,
+            max_deflection=max_deflection,
+            steps=steps,
+            num_points=num_points,
+            capture_geometry=True,
         )
         thetas = geometry["thetas"]
         z_history = geometry["z_history"]

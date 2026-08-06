@@ -1,3 +1,4 @@
+"""Class for calculating a standard compression spring."""
 from math import pi
 from pydantic import field_validator, ConfigDict
 from .constants import COMPRESSION_SPRING_END_TYPES, FORMING_TYPES
@@ -15,17 +16,18 @@ from ..pymodels.units import ureg
 from ..pymodels.positions import LinearPositionsTable
 from typing import Optional
 import matplotlib
-matplotlib.use('Agg')
 from .plotting import interactive_backend
-"""Class for calculating a compression spring."""
+matplotlib.use('Agg')
 
 
 class CompressionSpring(LinealSpring):
     # Additional CompressionSpring fields
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
     type_of_end: str = COMPRESSION_SPRING_END_TYPES[1]  # ground by default
-    type_conforming: str = FORMING_TYPES[1] # cold formed by default
-    wire_length: Optional[Quantity] = 0.0 * ureg.mm # in mm
+    # set cold formed by default
+    type_conforming: str = FORMING_TYPES[1]
+    # the wire length should be in mm
+    wire_length: Optional[Quantity] = 0.0 * ureg.mm
     nr_coils: Optional[float] = None
     solid_length: Quantity = 0.0 * ureg.mm  # Length at maximum load in mm
     positions: LinearPositionsTable = LinearPositionsTable()
@@ -147,7 +149,8 @@ class CompressionSpring(LinealSpring):
             self.nr_active_coils = self.nr_coils - 2
             if self.type_of_end in [COMPRESSION_SPRING_END_TYPES[3], COMPRESSION_SPRING_END_TYPES[4]]:  # unground
                 self.nr_active_coils -= 1.5
-        else: # hot formed
+        else:
+            # in case spring is hot formed
             self.nr_active_coils = self.nr_coils - 1.5
         if self.type_of_end in [COMPRESSION_SPRING_END_TYPES[1], COMPRESSION_SPRING_END_TYPES[2]]:  # ground
             self.nr_active_coils -= 0.3
@@ -191,9 +194,9 @@ class CompressionSpring(LinealSpring):
     def calculate_outer_diameter_at_position(self, length):
         """Calculate the spring outer diameter."""
         self.position_length = length
-        outer_diameter = self.mean_diameter + self.wire_diameter + \
-                           self.mean_diameter * self.material.poisson_coef * \
-                           (self.free_length - self.position_length) / self.free_length
+        outer_diameter = (self.mean_diameter + self.wire_diameter +
+                          self.mean_diameter * self.material.poisson_coef *
+                          (self.free_length - self.position_length) / self.free_length)
         return outer_diameter
 
     def empty_tables(self):
@@ -244,7 +247,7 @@ class CompressionSpring(LinealSpring):
         positions = [_to_mm_float(pc.position) for pc in positions_table]
         loads = [_to_n_float(pc.load) for pc in positions_table]
         with interactive_backend(show):
-            plot = plt.figure()
+            plt.figure()
             plt.plot(positions, loads, marker='o')
             plt.title('Load vs Position Curve')
             plt.xlabel('Position (mm)')
@@ -274,7 +277,7 @@ class CompressionSpring(LinealSpring):
         travels = [_to_mm_float(pc.travel) for pc in positions_table]
         loads = [_to_n_float(pc.load) for pc in positions_table]
         with interactive_backend(show):
-            plot = plt.figure()
+            plt.figure()
             plt.plot(travels, loads, marker='o')
             plt.title('Load vs Travel Curve')
             plt.xlabel('Travel (mm)')
@@ -300,7 +303,7 @@ class CompressionSpring(LinealSpring):
         positions = [_to_mm_float(pc.position) for pc in positions_table]
         diameters = [_to_mm_float(pc.outer_diameter) for pc in positions_table]
         with interactive_backend(show):
-            plot = plt.figure()
+            plt.figure()
             plt.plot(positions, diameters, marker='o', color='orange')
             plt.title('Outer Diameter vs Position')
             plt.xlabel('Position (mm)')
@@ -495,9 +498,9 @@ class CompressionSpring(LinealSpring):
         # Placeholder implementation
         # The logic for creating the Goodman diagram would be implemented here.
         stress_min = min(self.positions.positions,
-                        key=lambda x: x.stress).stress
+                         key=lambda x: x.stress).stress
         stress_max = max(self.positions.positions,
-                        key=lambda x: x.stress).stress
+                         key=lambda x: x.stress).stress
         if show:
             goodman.plot_goodman_graph(stress_max, stress_min)
         else:

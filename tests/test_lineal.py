@@ -10,7 +10,7 @@ spring = CompressionSpring(material=material, wire_diameter=2.5)
 # Configure the spring's properties (using the correct method names).
 # set_diameter sets mean/outer/inner diameter from one of them.
 spring.set_diameter(outer_diameter=30)
-print(f"✅ Basic CompressionSpring test")
+print("✅ Basic CompressionSpring test")
 print(f"Material: {spring.material.material_name}")
 print(f"Wire diameter: {spring.wire_diameter}")
 print(f"Mean diameter: {spring.mean_diameter}")
@@ -28,10 +28,10 @@ if hasattr(spring, 'calculate_wahl_factor'):
     if wahl_factor is not None:
         print(f"Wahl factor: {wahl_factor:.3f}")
     else:
-        print(f"Wahl factor: Not calculated (null value)")
+        print("Wahl factor: Not calculated (null value)")
 
 spring.calculate_spring_properties(nr_coils=10, pitch=None, free_length=100)
-positions = [30,40,50,60,70,80,90,100]
+positions = [30, 40, 50, 60, 70, 80, 90, 100]
 for pos in positions:
     spring.add_load_position(length=pos)
 

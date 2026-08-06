@@ -10,6 +10,7 @@ from springcalc.lineal.generic_compression import CompressionSpringGeneral
 from springcalc.lineal.compresion import CompressionSpring
 from matplotlib import pyplot as plt
 
+
 def _build_constant_geometry_spring():
     """A constant-diameter, constant-pitch spring should behave like a regular one."""
     material = Material(material_name="SH")
@@ -24,13 +25,13 @@ def _build_constant_geometry_spring():
     spring.calculate_spring_properties()
     spring_data = spring.get_spring_data()
     std_spring_data = std_spring.get_spring_data()
-    print(f"✅ Constant-geometry CompressionSpringGeneral test, data of the generic class:")
+    print("✅ Constant-geometry CompressionSpringGeneral test, data of the generic class:")
     for key, value in spring_data.items():
         print(f"{key}: {value}")
-    print(f"✅ Constant-geometry CompressionSpring test, data of the standard class:")
+    print("✅ Constant-geometry CompressionSpring test, data of the standard class:")
     for key, value in std_spring_data.items():
         print(f"{key}: {value}")
-    print(f"✅ Comparing CompressionSpringGeneral and CompressionSpring data:")
+    print("✅ Comparing CompressionSpringGeneral and CompressionSpring data:")
     for key, value in spring_data.items():
         std_value = std_spring_data[key]
         print(f"{key}: {value}, std: {std_value}")
@@ -78,13 +79,13 @@ def test_simulate_progressive_compression():
     # as CompressionSpring's other graph methods, for embedding in HTML/PDF).
     # For local debugging, decode it and write it to disk to look at it,
     # since plt.show() can't open a window under the "Agg" backend.
-    plot_data = spring.get_progressive_compression_graph(deflection, force, show=True)
+    spring.get_progressive_compression_graph(deflection, force, show=True)
 
 
-def cuadratic_middle_pitch(x: Quantity, 
-                      min_pitch: Quantity,
-                      max_pitch: Quantity,
-                      free_length: Quantity) -> Quantity:
+def cuadratic_middle_pitch(x: Quantity,
+                           min_pitch: Quantity,
+                           max_pitch: Quantity,
+                           free_length: Quantity) -> Quantity:
     if not isinstance(x, Quantity):
         x = x * ureg.mm
     if x.magnitude < 0 or x.magnitude > free_length.magnitude:
@@ -93,6 +94,7 @@ def cuadratic_middle_pitch(x: Quantity,
     pitch = a * (x - x ** 2 / free_length) + min_pitch
     # pitch = 2.5 * ureg.mm + (x.magnitude / 100) * (10.0 - 2.5) * ureg.mm
     return pitch
+
 
 def progressive_pitch(x: Quantity,
                       min_pitch: Quantity,
@@ -113,21 +115,22 @@ def cuadratic_pitch(x: Quantity,
                     free_length: Quantity,
                     alfa: float,
                     beta: float) -> Quantity:
-        if not isinstance(x, Quantity):
-            x = x * ureg.mm
-        if x.magnitude < 0 or x.magnitude > free_length.magnitude:
-            raise ValueError("x must be between 0 and free_length")
-        a = (max_pitch * (beta - alfa) + min_pitch * (alfa - 1)) / (free_length ** 2 * (alfa - 1) * alfa)
-        b = (max_pitch * (alfa**2 - beta) - min_pitch * (alfa - 1)**2) / (free_length * (alfa - 1) * alfa)
-        # minimum_pos = - b.magnitude / (2 * a.magnitude)
-        # if x.magnitude < minimum_pos * free_length.magnitude:
-            # x = minimum_pos * ureg.mm
-        pitch = a * x ** 2 + b * x + min_pitch
-        return pitch
+    if not isinstance(x, Quantity):
+        x = x * ureg.mm
+    if x.magnitude < 0 or x.magnitude > free_length.magnitude:
+        raise ValueError("x must be between 0 and free_length")
+    a = (max_pitch * (beta - alfa) + min_pitch * (alfa - 1)) / (free_length ** 2 * (alfa - 1) * alfa)
+    b = (max_pitch * (alfa**2 - beta) - min_pitch * (alfa - 1)**2) / (free_length * (alfa - 1) * alfa)
+    # minimum_pos = - b.magnitude / (2 * a.magnitude)
+    # if x.magnitude < minimum_pos * free_length.magnitude:
+    #     x = minimum_pos * ureg.mm
+    pitch = a * x ** 2 + b * x + min_pitch
+    return pitch
+
 
 def test_progressive_pitch():
     pitch_values = []
-    for i in range (130):
+    for i in range(130):
         x = i * ureg.mm
         pitch = cuadratic_pitch(x,
                                 min_pitch=2.1 * ureg.mm,
@@ -149,15 +152,15 @@ def test_progressive_pitch():
 
     spring.set_geometry(func_D=lambda x: 20 * ureg.mm,
                         func_p=lambda x: cuadratic_pitch(x,
-                                                           min_pitch=2.1 * ureg.mm,
-                                                           max_pitch=8.0 * ureg.mm,
-                                                           free_length=130 * ureg.mm,
-                                                           alfa=0.7,
-                                                           beta=0.3),
+                                                         min_pitch=2.1 * ureg.mm,
+                                                         max_pitch=8.0 * ureg.mm,
+                                                         free_length=130 * ureg.mm,
+                                                         alfa=0.7,
+                                                         beta=0.3),
                         free_length=130 * ureg.mm)
     spring.calculate_spring_properties()
     spring_data = spring.get_spring_data()
-    print(f"✅ Progressive-pitch CompressionSpringGeneral test, data of the generic class:")
+    print("✅ Progressive-pitch CompressionSpringGeneral test, data of the generic class:")
     for key, value in spring_data.items():
         print(f"{key}: {value}")
     positions = [120, 100]
@@ -172,7 +175,7 @@ def test_progressive_pitch():
     # as CompressionSpring's other graph methods, for embedding in HTML/PDF).
     # For local debugging, decode it and write it to disk to look at it,
     # since plt.show() can't open a window under the "Agg" backend.
-    plot_data = spring.get_progressive_compression_graph(deflection, force, show=True)
+    spring.get_progressive_compression_graph(deflection, force, show=True)
 
 
 if __name__ == "__main__":

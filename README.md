@@ -100,6 +100,8 @@ and auto-fills any field you don't pass explicitly.
 | `.poisson_coef` | Poisson's ratio (dimensionless). |
 | `.RMa_file` | Name of the CSV (in `material/`) with tensile-strength ranges by wire diameter. |
 | `get_available_materials()` | Module-level function: list of valid `material_name` values. |
+| `Material.material_exists(material_name)` | Classmethod: whether a material is already registered. |
+| `Material.create_material(material_name, young_modulus, shear_modulus, elastic_limit_factor, poisson_coef, description="", RMa_file=None, RMa_data=None, overwrite=False)` | Classmethod: register a new material in `materials.csv` (and optionally its `RMa_file` table) and return it. Raises `ValueError` if the name already exists, unless `overwrite=True`. |
 
 ```python
 from springcalc import Material, get_available_materials
@@ -111,6 +113,28 @@ material = Material(material_name="SH")
 print(material.young_modulus)    # 206000.0 megapascal
 print(material.shear_modulus)    # 81500.0 megapascal
 print(material.poisson_coef)     # 0.3 dimensionless
+```
+
+Adding a new material — `young_modulus`/`shear_modulus` accept a unit string, a
+plain number (assumed MPa), or a `Quantity`; `elastic_limit_factor` and
+`poisson_coef` are dimensionless. Once created, the material is loadable by
+name like any built-in one:
+
+```python
+from springcalc import Material
+
+custom = Material.create_material(
+    material_name="CustomSteel",
+    young_modulus="210000 MPa",
+    shear_modulus=81000,
+    elastic_limit_factor=0.5,
+    poisson_coef=0.3,
+    description="Custom steel for a special order",
+    RMa_data=[(1.0, 1600, 1800), (2.0, 1500, 1700)],  # (diameter mm, RMa_min, RMa_max)
+)
+
+# From now on it behaves like any other material
+same_material = Material(material_name="CustomSteel")
 ```
 
 ### Wire characteristics

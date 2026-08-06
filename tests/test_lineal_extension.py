@@ -8,7 +8,7 @@ material = Material(material_name="SL")
 spring = ExtensionSpring(material=material, wire_diameter=2.5)
 # Configure the spring's properties (using the correct method names)
 spring.set_diameter(outer_diameter=30)
-print(f"✅ Basic ExtensionSpring test")
+print("✅ Basic ExtensionSpring test")
 
 spring.calculate_spring_properties(nr_coils=20, pitch=None, free_length=100)
 

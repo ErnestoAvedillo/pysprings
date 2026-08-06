@@ -8,11 +8,11 @@ material = Material(material_name="SL")
 spring = CompressionSpring(material=material, wire_diameter=2.5)
 # Configure the spring's properties (using the correct method names)
 spring.set_diameter(outer_diameter=30)
-print(f"✅ Basic CompressionSpring test")
+print("✅ Basic CompressionSpring test")
 
 spring.calculate_spring_properties(nr_coils=None, pitch=20, free_length=100)
 
-positions = [30,40,50,60,70,80,90,100]
+positions = [30, 40, 50, 60, 70, 80, 90, 100]
 for pos in positions:
     try:
         spring.add_load_position(length=pos)
@@ -55,7 +55,5 @@ spring.get_forces_vs_travel_graph(show=True)
 spring.get_diameter_graph(show=True)
 spring.get_diameter_vs_position_graph(show=True)
 spring.create_goodman_diagram(show=True)
-
-
 
 print("🎉 Test completed successfully!")
